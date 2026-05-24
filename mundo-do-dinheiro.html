@@ -3,19 +3,27 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Mundo do Dinheiro 💰 — Aprenda Macroeconomia Jogando</title>
   <meta name="description"
     content="Jogo educativo interativo sobre inflação, câmbio, SELIC e macroeconomia brasileira. Aprenda jogando!">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap"
     rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"
+    onerror="document.getElementById('load-error').style.display='flex'; document.getElementById('loading').style.display='none';"></script>
   <style>
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
     }
 
     body {
@@ -28,9 +36,14 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
+      min-height: 100%;
       font-family: 'Nunito', 'Segoe UI', sans-serif;
       overflow: hidden;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
     }
 
     #game-container {
@@ -41,6 +54,8 @@
         0 0 0 1px rgba(255, 210, 0, 0.15),
         0 20px 60px rgba(0, 0, 0, 0.5);
       transition: box-shadow 0.3s;
+      max-width: 100vw;
+      max-height: 100%;
     }
 
     #game-container:hover {
@@ -52,11 +67,103 @@
 
     canvas {
       display: block;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none;
+      user-select: none;
+      image-rendering: auto !important;
+    }
+
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      background: #06061a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      gap: 20px;
+      font-family: 'Nunito', sans-serif;
+    }
+
+    #loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .spinner {
+      width: 52px;
+      height: 52px;
+      border: 4px solid rgba(255, 210, 0, 0.15);
+      border-top-color: #ffd200;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    #loading p {
+      color: #ffd200;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    #loading small {
+      color: #888;
+      font-size: 12px;
+    }
+
+    #load-error {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: #ff6b6b;
+      text-align: center;
+      padding: 20px;
+    }
+
+    #load-error span {
+      font-size: 40px;
+    }
+
+    #load-error strong {
+      font-size: 16px;
+      color: #fff;
+    }
+
+    #load-error p {
+      font-size: 13px;
+      color: #aaa;
+      max-width: 280px;
+      line-height: 1.5;
     }
   </style>
 </head>
 
 <body>
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div id="loading">
+      <div class="spinner"></div>
+      <p>🌍 Mundo do Dinheiro</p>
+      <small>Carregando o jogo...</small>
+    </div>
+    <div id="load-error">
+      <span>⚠️</span>
+      <strong>Erro ao carregar</strong>
+      <p>Verifique sua conexão com a internet e recarregue a página.</p>
+    </div>
+  </div>
+
   <div id="game-container"></div>
   <script>
     // ═══════════════════════════════════════════════
@@ -66,6 +173,8 @@
       constructor() {
         this.ctx = null;
         this.enabled = true;
+        this.bgmPlaying = false;
+        this.bgmInterval = null;
       }
       init() {
         if (this.ctx) return;
@@ -106,6 +215,44 @@
       }
       pop() { this._tone(Phaser.Math.Between(600, 1400), 0.08, 'sine', 0.06); }
       tick() { this._tone(1000, 0.02, 'square', 0.03); }
+      toggleBGM() {
+        if (!this.enabled) return false;
+        this.init();
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+        
+        if (this.bgmPlaying) {
+          this.bgmPlaying = false;
+          if (this.bgmInterval) clearTimeout(this.bgmInterval);
+        } else {
+          this.bgmPlaying = true;
+          // C major, A minor, F major, G major
+          const notes = [ [261.63, 329.63, 392.00], [220.00, 261.63, 329.63], [174.61, 220.00, 261.63], [196.00, 246.94, 293.66] ];
+          let step = 0; let chordIdx = 0;
+          
+          const playNext = () => {
+            if (!this.bgmPlaying) return;
+            const chord = notes[chordIdx];
+            const freq = chord[step % 3];
+            
+            // Arpeggio note
+            this._tone(freq * 2, 0.3, 'sine', 0.015);
+            
+            // Bass note on first beat
+            if (step % 3 === 0) {
+              this._tone(chord[0] / 2, 0.6, 'triangle', 0.03);
+            }
+            
+            step++;
+            if (step % 3 === 0) {
+              chordIdx = (chordIdx + 1) % notes.length;
+            }
+            
+            this.bgmInterval = setTimeout(playNext, 280);
+          };
+          playNext();
+        }
+        return this.bgmPlaying;
+      }
     }
 
     const sfx = new SoundFX();
@@ -251,8 +398,9 @@
         // Title with glow
         const glowTitle = this.add.text(W / 2, 62, '🌍 MUNDO DO DINHEIRO', {
           fontSize: '28px', fontFamily: 'Fredoka One', fill: '#ffd200',
-          stroke: '#000', strokeThickness: 5, align: 'center'
+          align: 'center'
         }).setOrigin(0.5).setAlpha(0);
+        glowTitle.setShadow(0, 4, 'rgba(0,0,0,0.6)', 8, false, true);
 
         const subtitle = this.add.text(W / 2, 98, 'Aprenda macroeconomia jogando!', {
           fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#a8c8ff', align: 'center'
@@ -264,6 +412,15 @@
 
         // Pulsing glow on title
         this.tweens.add({ targets: glowTitle, scaleX: 1.02, scaleY: 1.02, yoyo: true, repeat: -1, duration: 2000, ease: 'Sine.easeInOut' });
+
+        // BGM Toggle
+        const bgmBtn = this.add.text(W - 25, 25, sfx.bgmPlaying ? '🔊' : '🔇', { fontSize: '24px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        bgmBtn.on('pointerdown', () => {
+          const isPlaying = sfx.toggleBGM();
+          bgmBtn.setText(isPlaying ? '🔊' : '🔇');
+          // small animation
+          this.tweens.add({ targets: bgmBtn, scaleX: 1.2, scaleY: 1.2, yoyo: true, duration: 100 });
+        });
 
         // Professor Coruja with entrance animation
         const guide = this.add.text(W / 2, 180, '🦉', { fontSize: '64px' }).setOrigin(0.5).setAlpha(0).setScale(0.3);
@@ -1748,19 +1905,57 @@
     // CONFIG & BOOT
     // ═══════════════════════════════════════════════
     const config = {
-      type: Phaser.AUTO,
+      type: Phaser.CANVAS,
       width: 360,
       height: 620,
-      backgroundColor: '#06061a',
+      backgroundColor: '#00000000',
+      transparent: true,
       parent: 'game-container',
       scene: [SceneIntro, SceneInflacao, SceneCambio, SceneSelic, SceneConexao, SceneFinal],
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
+      },
+      input: {
+        activePointers: 3,
+      },
+      render: {
+        antialias: true,
+        pixelArt: false,
+        roundPixels: false,
+        transparent: true,
+      },
+      resolution: window.devicePixelRatio || 1,
+      callbacks: {
+        preBoot: function (game) {
+          // Hide loading screen as soon as Phaser boots
+          const ls = document.getElementById('loading-screen');
+          if (ls) ls.style.display = 'none';
+        }
       }
     };
 
-    new Phaser.Game(config);
+    // Timeout: if Phaser hasn't booted in 12s, show error
+    const loadTimeout = setTimeout(() => {
+      const ls = document.getElementById('loading-screen');
+      const loading = document.getElementById('loading');
+      const err = document.getElementById('load-error');
+      if (ls && ls.style.display !== 'none') {
+        if (loading) loading.style.display = 'none';
+        if (err) err.style.display = 'flex';
+      }
+    }, 12000);
+
+    try {
+      const game = new Phaser.Game(config);
+      game.events.once('ready', () => clearTimeout(loadTimeout));
+    } catch (e) {
+      clearTimeout(loadTimeout);
+      const loading = document.getElementById('loading');
+      const err = document.getElementById('load-error');
+      if (loading) loading.style.display = 'none';
+      if (err) err.style.display = 'flex';
+    }
   </script>
 </body>
 

@@ -225,29 +225,46 @@
           if (this.bgmInterval) clearTimeout(this.bgmInterval);
         } else {
           this.bgmPlaying = true;
-          // C major, A minor, F major, G major
-          const notes = [ [261.63, 329.63, 392.00], [220.00, 261.63, 329.63], [174.61, 220.00, 261.63], [196.00, 246.94, 293.66] ];
-          let step = 0; let chordIdx = 0;
+          // Progressão Pedrada (Chico César): Bb - Gm - Eb - F
+          // Ritmo Reggae (Baixo nas cabeças, acordes no contratempo) e melodia marcante
+          const progression = [
+            // Bar 0: Bb
+            { bass: 116.54, chord: [233.08, 293.66, 349.23], melody: [349.23, 0, 349.23, 0, 293.66, 0, 0, 0] },
+            // Bar 1: Gm
+            { bass: 98.00, chord: [196.00, 233.08, 293.66], melody: [293.66, 0, 293.66, 0, 233.08, 0, 0, 0] },
+            // Bar 2: Eb
+            { bass: 77.78, chord: [155.56, 196.00, 233.08], melody: [233.08, 0, 233.08, 0, 196.00, 0, 0, 0] },
+            // Bar 3: F
+            { bass: 87.31, chord: [174.61, 220.00, 261.63], melody: [261.63, 0, 261.63, 0, 220.00, 0, 0, 0] }
+          ];
           
+          let step = 0;
           const playNext = () => {
             if (!this.bgmPlaying) return;
-            const chord = notes[chordIdx];
-            const freq = chord[step % 3];
             
-            // Arpeggio note
-            this._tone(freq * 2, 0.3, 'sine', 0.015);
+            const bar = Math.floor(step / 8) % 4;
+            const beat = step % 8;
+            const prog = progression[bar];
             
-            // Bass note on first beat
-            if (step % 3 === 0) {
-              this._tone(chord[0] / 2, 0.6, 'triangle', 0.03);
+            // Reggae Bass (tempos fortes)
+            if (beat === 0 || beat === 4) {
+              this._tone(prog.bass, 0.4, 'triangle', 0.08);
+            }
+            
+            // Reggae Skank (acordes nos contratempos)
+            if (beat === 2 || beat === 6) {
+              prog.chord.forEach(f => this._tone(f, 0.1, 'square', 0.02));
+            }
+            
+            // Melodia "Pe-dra-da"
+            const m = prog.melody[beat];
+            if (m) {
+              this._tone(m, 0.2, 'sine', 0.05);
+              this._tone(m * 2, 0.2, 'sine', 0.015); // camada mais aguda
             }
             
             step++;
-            if (step % 3 === 0) {
-              chordIdx = (chordIdx + 1) % notes.length;
-            }
-            
-            this.bgmInterval = setTimeout(playNext, 280);
+            this.bgmInterval = setTimeout(playNext, 180); // Velocidade do reggae
           };
           playNext();
         }

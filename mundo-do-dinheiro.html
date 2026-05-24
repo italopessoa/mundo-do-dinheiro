@@ -538,11 +538,23 @@
         });
 
         // Bottom hint
-        const hint = this.add.text(W / 2, 575, '↑ Clique em uma fase para começar!', {
+        const hint = this.add.text(W / 2, 570, '↑ Clique em uma fase para começar!', {
           fontSize: '12px', fontFamily: 'Nunito', fill: '#ffd200', align: 'center'
         }).setOrigin(0.5).setAlpha(0);
         this.tweens.add({ targets: hint, alpha: 0.7, duration: 500, delay: 1500 });
         this.tweens.add({ targets: hint, alpha: 0.4, yoyo: true, repeat: -1, duration: 1200, delay: 2000 });
+
+        // GitHub Link
+        const gitBg = this.add.graphics();
+        drawRoundedRect(gitBg, W / 2, 600, 150, 24, 6, 0xffffff, 0.1);
+        const gitTxt = this.add.text(W / 2, 600, '🐙 GitHub do Projeto', {
+          fontSize: '11px', fontFamily: 'Nunito', fill: '#ffffff', fontStyle: 'bold'
+        }).setOrigin(0.5);
+        const gitHit = this.add.rectangle(W / 2, 600, 150, 24, 0xffffff, 0).setInteractive({ useHandCursor: true });
+        gitHit.on('pointerdown', () => {
+          sfx.click();
+          window.open('https://github.com/italopessoa/mundo-do-dinheiro', '_blank');
+        });
 
         this.cameras.main.fadeIn(500);
       }
@@ -813,18 +825,24 @@
         const emoji = this.score >= 2 ? '🏆' : '📚';
         const msg = this.score >= 2 ? 'Incrível! Você entendeu\no que é INFLAÇÃO!' : 'Quase lá! Tente de novo\npara fixar o conceito.';
 
-        if (this.score >= 2) { sfx.fanfare(); addConfetti(this, W / 2, 200, 30); }
+        if (this.score >= 2) { sfx.fanfare(); addConfetti(this, W / 2, 100, 30); }
 
-        this.add.text(W / 2, 140, emoji, { fontSize: '56px' }).setOrigin(0.5);
-        this.add.text(W / 2, 210, msg, {
-          fontSize: '17px', fontFamily: 'Fredoka One', fill: '#ffd200', align: 'center', lineSpacing: 6
+        this.add.text(W / 2, 100, emoji, { fontSize: '48px' }).setOrigin(0.5);
+        this.add.text(W / 2, 150, msg, {
+          fontSize: '16px', fontFamily: 'Fredoka One', fill: '#ffd200', align: 'center', lineSpacing: 6
         }).setOrigin(0.5);
-        this.add.text(W / 2, 270, `Acertos: ${this.score}/3`, {
-          fontSize: '16px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff'
+        this.add.text(W / 2, 190, `Acertos: ${this.score}/3  ` + starsText(stars), {
+          fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff'
         }).setOrigin(0.5);
 
-        this.add.text(W / 2, 300, starsText(stars), {
-          fontSize: '24px', fill: '#ffd200'
+        // Feedback Educacional
+        const info = this.add.graphics();
+        info.fillStyle(0xffdd44, 0.1);
+        info.fillRoundedRect(20, 220, W - 40, 100, 8);
+        info.lineStyle(1, 0xffdd44, 0.3);
+        info.strokeRoundedRect(20, 220, W - 40, 100, 8);
+        this.add.text(W / 2, 270, '💡 A Lição:\nA inflação age como um imposto invisível.\nQuando o governo imprime dinheiro ou a\noferta cai, seu dinheiro perde valor\ne você compra menos coisas.', {
+          fontSize: '12px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#ffd966', align: 'center', lineSpacing: 4
         }).setOrigin(0.5);
 
         const btns = [
@@ -833,7 +851,7 @@
           { label: '←  Menu', cor: 0x555555, action: () => { this.cameras.main.fadeOut(300, 0, 0, 0); this.time.delayedCall(300, () => this.scene.start('Intro')); } },
         ];
         btns.forEach((b, i) => {
-          const btnY = 370 + i * 58;
+          const btnY = 360 + i * 55;
           const bg = this.add.graphics();
           drawRoundedRect(bg, W / 2, btnY, 220, 42, 10, b.cor);
           const txt = this.add.text(W / 2, btnY, b.label, {
@@ -1137,18 +1155,26 @@
         this.clearContent();
         const W = this.scale.width;
 
-        if (stars >= 2) { sfx.fanfare(); addConfetti(this, W / 2, 200, 25); }
+        if (stars >= 2) { sfx.fanfare(); addConfetti(this, W / 2, 100, 25); }
 
-        this.add.text(W / 2, 120, stars >= 2 ? '🏆' : '📊', { fontSize: '56px' }).setOrigin(0.5);
-        this.add.text(W / 2, 185, 'Resultado do Importador', {
-          fontSize: '18px', fontFamily: 'Fredoka One', fill: '#ffd200'
+        this.add.text(W / 2, 90, stars >= 2 ? '🏆' : '📊', { fontSize: '48px' }).setOrigin(0.5);
+        this.add.text(W / 2, 140, 'Resultado do Importador', {
+          fontSize: '16px', fontFamily: 'Fredoka One', fill: '#ffd200'
         }).setOrigin(0.5);
 
-        this.add.text(W / 2, 230, `Você gastou: R$ ${this.totalGasto.toFixed(0)}\nMelhor possível: R$ ${bestPossible.toFixed(0)}\nEficiência: ${(efficiency * 100).toFixed(0)}%`, {
-          fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff', align: 'center', lineSpacing: 6
+        this.add.text(W / 2, 180, `Você gastou: R$ ${this.totalGasto.toFixed(0)}\nMelhor possível: R$ ${bestPossible.toFixed(0)}\nEficiência: ${(efficiency * 100).toFixed(0)}%  ` + starsText(stars), {
+          fontSize: '13px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff', align: 'center', lineSpacing: 4
         }).setOrigin(0.5);
 
-        this.add.text(W / 2, 295, starsText(stars), { fontSize: '24px', fill: '#ffd200' }).setOrigin(0.5);
+        // Feedback Educacional
+        const info = this.add.graphics();
+        info.fillStyle(0x27ae60, 0.1);
+        info.fillRoundedRect(20, 220, W - 40, 100, 8);
+        info.lineStyle(1, 0x27ae60, 0.3);
+        info.strokeRoundedRect(20, 220, W - 40, 100, 8);
+        this.add.text(W / 2, 270, '💡 A Lição:\nO Risco Cambial é real! Comprar dólar\nquando está barato protege as empresas\ncontra crises globais e mantém os\npreços estáveis no Brasil.', {
+          fontSize: '12px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#66ffaa', align: 'center', lineSpacing: 4
+        }).setOrigin(0.5);
 
         const btns = [
           { label: '🔄  Tentar de novo', cor: 0x8e44ad, action: () => { sfx.click(); this.showGame(); } },
@@ -1156,7 +1182,7 @@
           { label: '←  Menu', cor: 0x555555, action: () => { sfx.click(); this.cameras.main.fadeOut(300, 0, 0, 0); this.time.delayedCall(300, () => this.scene.start('Intro')); } },
         ];
         btns.forEach((b, i) => {
-          const btnY = 350 + i * 58;
+          const btnY = 360 + i * 55;
           const bg = this.add.graphics();
           drawRoundedRect(bg, W / 2, btnY, 220, 42, 10, b.cor);
           const txt = this.add.text(W / 2, btnY, b.label, {
@@ -1477,11 +1503,19 @@
           fontSize: '18px', fontFamily: 'Fredoka One', fill: '#ffd200'
         }).setOrigin(0.5);
 
-        this.add.text(W / 2, 240, `Inflação final: ${this.inflacao.toFixed(1)}% (meta: 3-4.5%)\nPIB: ${this.pib >= 0 ? '+' : ''}${this.pib.toFixed(1)}%\nSELIC final: ${this.selic.toFixed(1)}%`, {
-          fontSize: '13px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff', align: 'center', lineSpacing: 6
+        this.add.text(W / 2, 190, `Inflação: ${this.inflacao.toFixed(1)}% | PIB: ${this.pib >= 0 ? '+' : ''}${this.pib.toFixed(1)}% | SELIC: ${this.selic.toFixed(1)}%  ` + starsText(stars), {
+          fontSize: '12px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff', align: 'center'
         }).setOrigin(0.5);
 
-        this.add.text(W / 2, 300, starsText(stars), { fontSize: '24px', fill: '#ffd200' }).setOrigin(0.5);
+        // Feedback Educacional
+        const info = this.add.graphics();
+        info.fillStyle(0x2980b9, 0.1);
+        info.fillRoundedRect(20, 215, W - 40, 105, 8);
+        info.lineStyle(1, 0x2980b9, 0.3);
+        info.strokeRoundedRect(20, 215, W - 40, 105, 8);
+        this.add.text(W / 2, 267, '💡 A Lição:\nA Taxa SELIC é a principal ferramenta\ndo Banco Central. Juros altos freiam a\ninflação porque encarecem o crédito, mas\ntambém esfriam o crescimento (PIB).', {
+          fontSize: '12px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#c8e0ff', align: 'center', lineSpacing: 4
+        }).setOrigin(0.5);
 
         const btns = [
           { label: '🔄  Tentar de novo', cor: 0x8e44ad, action: () => { sfx.click(); this.showGame(); } },
@@ -1765,8 +1799,14 @@
         }).setOrigin(0.5);
         this.add.text(W / 2, 270, starsText(stars), { fontSize: '24px', fill: '#ffd200' }).setOrigin(0.5);
 
-        this.add.text(W / 2, 310, '💡 Tudo na economia está conectado!\nUma decisão gera uma cadeia de efeitos.', {
-          fontSize: '12px', fontFamily: 'Nunito', fill: '#ddaaff', align: 'center', lineSpacing: 4
+        // Feedback Educacional
+        const info = this.add.graphics();
+        info.fillStyle(0x8e44ad, 0.1);
+        info.fillRoundedRect(20, 290, W - 40, 65, 8);
+        info.lineStyle(1, 0x8e44ad, 0.3);
+        info.strokeRoundedRect(20, 290, W - 40, 65, 8);
+        this.add.text(W / 2, 322, '💡 Tudo na economia está conectado!\nUma simples decisão do governo ou crise\nexterna gera uma cadeia de efeitos em tudo.', {
+          fontSize: '12px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#ddaaff', align: 'center', lineSpacing: 4
         }).setOrigin(0.5);
 
         const btns = [
@@ -1869,11 +1909,22 @@
 
         // Buttons
         const btnsBg = [
-          { label: '🏠  Jogar de Novo', cor: 0xe67e22, action: () => { sfx.click(); this.cameras.main.fadeOut(400, 0, 0, 0); this.time.delayedCall(400, () => this.scene.start('Intro')); } },
-          { label: '🗑️  Resetar Progresso', cor: 0x555555, action: () => { sfx.click(); progress.reset(); this.cameras.main.fadeOut(400, 0, 0, 0); this.time.delayedCall(400, () => this.scene.start('Intro')); } },
+          { label: '📣  Compartilhar', cor: 0x27ae60, action: () => {
+              sfx.click();
+              const text = `Me tornei um mestre da Macroeconomia no Mundo do Dinheiro! 🌍\nConsegui ${totalStars} de 12 estrelas! ⭐\n\nJogue também e aprenda de forma interativa:`;
+              const url = 'https://github.com/italopessoa/mundo-do-dinheiro';
+              if (navigator.share) {
+                navigator.share({ title: 'Mundo do Dinheiro', text: text, url: url }).catch(console.error);
+              } else {
+                window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text + ' ' + url)}`, '_blank');
+              }
+            } 
+          },
+          { label: '🏠  Menu Principal', cor: 0xe67e22, action: () => { sfx.click(); this.cameras.main.fadeOut(400, 0, 0, 0); this.time.delayedCall(400, () => this.scene.start('Intro')); } },
+          { label: '🗑️  Resetar', cor: 0x555555, action: () => { sfx.click(); progress.reset(); this.cameras.main.fadeOut(400, 0, 0, 0); this.time.delayedCall(400, () => this.scene.start('Intro')); } },
         ];
         btnsBg.forEach((b, i) => {
-          const btnY = 465 + i * 52;
+          const btnY = 445 + i * 46;
           const bg2 = this.add.graphics();
           drawRoundedRect(bg2, W / 2, btnY, 220, 42, 10, b.cor);
           const txt = this.add.text(W / 2, btnY, b.label, {

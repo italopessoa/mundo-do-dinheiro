@@ -1,0 +1,1767 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mundo do Dinheiro 💰 — Aprenda Macroeconomia Jogando</title>
+  <meta name="description"
+    content="Jogo educativo interativo sobre inflação, câmbio, SELIC e macroeconomia brasileira. Aprenda jogando!">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap"
+    rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #06061a;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(120, 40, 200, 0.15) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(255, 180, 0, 0.1) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 100%, rgba(0, 120, 255, 0.08) 0%, transparent 50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Nunito', 'Segoe UI', sans-serif;
+      overflow: hidden;
+    }
+
+    #game-container {
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow:
+        0 0 80px rgba(255, 210, 0, 0.2),
+        0 0 0 1px rgba(255, 210, 0, 0.15),
+        0 20px 60px rgba(0, 0, 0, 0.5);
+      transition: box-shadow 0.3s;
+    }
+
+    #game-container:hover {
+      box-shadow:
+        0 0 100px rgba(255, 210, 0, 0.3),
+        0 0 0 1px rgba(255, 210, 0, 0.25),
+        0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="game-container"></div>
+  <script>
+    // ═══════════════════════════════════════════════
+    // 🔊 SOUND FX — Procedural Web Audio
+    // ═══════════════════════════════════════════════
+    class SoundFX {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+      init() {
+        if (this.ctx) return;
+        try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.enabled = false; }
+      }
+      _tone(freq, dur, type = 'sine', vol = 0.15) {
+        if (!this.enabled || !this.ctx) return;
+        const o = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        o.type = type; o.frequency.value = freq;
+        g.gain.setValueAtTime(vol, this.ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+        o.connect(g); g.connect(this.ctx.destination);
+        o.start(); o.stop(this.ctx.currentTime + dur);
+      }
+      click() { this._tone(800, 0.06, 'sine', 0.08); }
+      hover() { this._tone(1200, 0.03, 'sine', 0.04); }
+      correct() {
+        this._tone(523, 0.12, 'sine', 0.12);
+        setTimeout(() => this._tone(659, 0.12, 'sine', 0.12), 100);
+        setTimeout(() => this._tone(784, 0.2, 'sine', 0.12), 200);
+      }
+      wrong() { this._tone(200, 0.3, 'sawtooth', 0.08); }
+      whoosh() {
+        if (!this.enabled || !this.ctx) return;
+        const o = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(100, this.ctx.currentTime);
+        o.frequency.exponentialRampToValueAtTime(2000, this.ctx.currentTime + 0.15);
+        g.gain.setValueAtTime(0.06, this.ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
+        o.connect(g); g.connect(this.ctx.destination);
+        o.start(); o.stop(this.ctx.currentTime + 0.25);
+      }
+      fanfare() {
+        [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this._tone(f, 0.3, 'sine', 0.1), i * 120));
+      }
+      pop() { this._tone(Phaser.Math.Between(600, 1400), 0.08, 'sine', 0.06); }
+      tick() { this._tone(1000, 0.02, 'square', 0.03); }
+    }
+
+    const sfx = new SoundFX();
+
+    // ═══════════════════════════════════════════════
+    // 💾 PROGRESS MANAGER — LocalStorage
+    // ═══════════════════════════════════════════════
+    class ProgressManager {
+      constructor() {
+        this.KEY = 'mundo_dinheiro_v2';
+        this.data = this.load();
+      }
+      load() {
+        try {
+          const d = JSON.parse(localStorage.getItem(this.KEY));
+          if (d && d.version === 2) return d;
+        } catch (e) { }
+        return { version: 2, fases: { inflacao: { done: false, stars: 0, best: 0 }, cambio: { done: false, stars: 0, best: 0 }, selic: { done: false, stars: 0, best: 0 }, conexao: { done: false, stars: 0, best: 0 } } };
+      }
+      save() { try { localStorage.setItem(this.KEY, JSON.stringify(this.data)); } catch (e) { } }
+      complete(fase, stars, score) {
+        const f = this.data.fases[fase];
+        f.done = true;
+        if (stars > f.stars) f.stars = stars;
+        if (score > f.best) f.best = score;
+        this.save();
+      }
+      get(fase) { return this.data.fases[fase]; }
+      totalStars() { return Object.values(this.data.fases).reduce((s, f) => s + f.stars, 0); }
+      totalDone() { return Object.values(this.data.fases).filter(f => f.done).length; }
+      reset() { localStorage.removeItem(this.KEY); this.data = this.load(); }
+    }
+
+    const progress = new ProgressManager();
+
+    // ═══════════════════════════════════════════════
+    // 🛠️ UI HELPERS
+    // ═══════════════════════════════════════════════
+
+    function drawRoundedRect(graphics, x, y, w, h, r, fillColor, fillAlpha = 1) {
+      graphics.fillStyle(fillColor, fillAlpha);
+      graphics.fillRoundedRect(x - w / 2, y - h / 2, w, h, r);
+    }
+
+    function drawSpeechBubble(scene, x, y, w, h, text, fontSize = '13px') {
+      const g = scene.add.graphics();
+      g.fillStyle(0x1a1a3a, 0.95);
+      g.fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      g.lineStyle(2, 0xffd200, 0.6);
+      g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      // Triangle pointer
+      g.fillStyle(0x1a1a3a, 0.95);
+      g.fillTriangle(x - 10, y - h / 2, x + 10, y - h / 2, x, y - h / 2 - 14);
+      g.lineStyle(2, 0xffd200, 0.6);
+      g.lineBetween(x - 10, y - h / 2, x, y - h / 2 - 14);
+      g.lineBetween(x + 10, y - h / 2, x, y - h / 2 - 14);
+
+      const t = scene.add.text(x, y, text, {
+        fontSize, fontFamily: 'Nunito', fill: '#fff', align: 'center',
+        lineSpacing: 5, wordWrap: { width: w - 20 }
+      }).setOrigin(0.5);
+      return { graphics: g, text: t };
+    }
+
+    function createProgressBar(scene, x, y, w, h, pct, fgColor = 0xffd200, bgColor = 0x222244) {
+      const g = scene.add.graphics();
+      g.fillStyle(bgColor, 0.8);
+      g.fillRoundedRect(x, y, w, h, h / 2);
+      if (pct > 0) {
+        g.fillStyle(fgColor, 1);
+        g.fillRoundedRect(x, y, Math.max(h, w * pct), h, h / 2);
+      }
+      return g;
+    }
+
+    function starsText(n) { return '★'.repeat(n) + '☆'.repeat(3 - n); }
+
+    function addConfetti(scene, x, y, count = 20) {
+      const colors = [0xff6b6b, 0xffd200, 0x6bff6b, 0x6baaff, 0xff6bff, 0xff9f43];
+      for (let i = 0; i < count; i++) {
+        const c = Phaser.Math.RND.pick(colors);
+        const p = scene.add.rectangle(x, y, Phaser.Math.Between(4, 8), Phaser.Math.Between(4, 8), c);
+        p.setAngle(Phaser.Math.Between(0, 360));
+        scene.tweens.add({
+          targets: p,
+          x: x + Phaser.Math.Between(-120, 120),
+          y: y + Phaser.Math.Between(-160, 60),
+          angle: Phaser.Math.Between(-180, 180),
+          alpha: 0, scaleX: 0, scaleY: 0,
+          duration: Phaser.Math.Between(600, 1200),
+          ease: 'Power2',
+          onComplete: () => p.destroy()
+        });
+      }
+    }
+
+    function addFloatingParticles(scene, count, color, minAlpha, maxAlpha) {
+      const W = scene.scale.width, H = scene.scale.height;
+      for (let i = 0; i < count; i++) {
+        const x = Phaser.Math.Between(0, W);
+        const y = Phaser.Math.Between(0, H);
+        const s = Phaser.Math.FloatBetween(1, 3);
+        const p = scene.add.circle(x, y, s, color, Phaser.Math.FloatBetween(minAlpha, maxAlpha));
+        scene.tweens.add({
+          targets: p, y: y - Phaser.Math.Between(30, 80), alpha: 0,
+          yoyo: true, repeat: -1,
+          duration: Phaser.Math.Between(2000, 5000),
+          delay: Phaser.Math.Between(0, 3000),
+          ease: 'Sine.easeInOut'
+        });
+      }
+    }
+
+    function typewriter(scene, textObj, fullText, speed = 30) {
+      textObj.setText('');
+      let i = 0;
+      scene.time.addEvent({
+        delay: speed,
+        repeat: fullText.length - 1,
+        callback: () => { textObj.setText(fullText.substring(0, ++i)); }
+      });
+    }
+
+    // ═══════════════════════════════════════════════
+    // CENA 0: MENU / INTRO
+    // ═══════════════════════════════════════════════
+    class SceneIntro extends Phaser.Scene {
+      constructor() { super('Intro'); }
+
+      create() {
+        sfx.init();
+        const W = this.scale.width, H = this.scale.height;
+
+        // Background gradient
+        const bg = this.add.graphics();
+        bg.fillGradientStyle(0x0d0d2b, 0x0d0d2b, 0x1a0a2e, 0x0a1a2e, 1);
+        bg.fillRect(0, 0, W, H);
+
+        addFloatingParticles(this, 50, 0xffffff, 0.2, 0.8);
+        // Ambient gold particles
+        addFloatingParticles(this, 15, 0xffd200, 0.1, 0.3);
+
+        // Title with glow
+        const glowTitle = this.add.text(W / 2, 62, '🌍 MUNDO DO DINHEIRO', {
+          fontSize: '28px', fontFamily: 'Fredoka One', fill: '#ffd200',
+          stroke: '#000', strokeThickness: 5, align: 'center'
+        }).setOrigin(0.5).setAlpha(0);
+
+        const subtitle = this.add.text(W / 2, 98, 'Aprenda macroeconomia jogando!', {
+          fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#a8c8ff', align: 'center'
+        }).setOrigin(0.5).setAlpha(0);
+
+        // Animate title entrance
+        this.tweens.add({ targets: glowTitle, alpha: 1, y: 58, duration: 800, ease: 'Back.out' });
+        this.tweens.add({ targets: subtitle, alpha: 1, duration: 600, delay: 300 });
+
+        // Pulsing glow on title
+        this.tweens.add({ targets: glowTitle, scaleX: 1.02, scaleY: 1.02, yoyo: true, repeat: -1, duration: 2000, ease: 'Sine.easeInOut' });
+
+        // Professor Coruja with entrance animation
+        const guide = this.add.text(W / 2, 180, '🦉', { fontSize: '64px' }).setOrigin(0.5).setAlpha(0).setScale(0.3);
+        this.tweens.add({
+          targets: guide, alpha: 1, scaleX: 1, scaleY: 1, duration: 600, delay: 400, ease: 'Back.out',
+          onComplete: () => {
+            this.tweens.add({ targets: guide, y: 173, yoyo: true, repeat: -1, duration: 1500, ease: 'Sine.easeInOut' });
+          }
+        });
+
+        // Speech bubble
+        const bubbleY = 257;
+        const bubble = drawSpeechBubble(this, W / 2, bubbleY, 290, 68,
+          'Olá! Eu sou o Professor Coruja.\nVou te guiar pelo mundo da economia!', '13px');
+        bubble.graphics.setAlpha(0);
+        bubble.text.setAlpha(0);
+        this.tweens.add({ targets: [bubble.graphics, bubble.text], alpha: 1, duration: 500, delay: 700 });
+
+        // Progress bar
+        const totalStars = progress.totalStars();
+        const totalDone = progress.totalDone();
+
+        if (totalDone > 0) {
+          const progBarY = 300;
+          this.add.text(W / 2, progBarY, `⭐ ${totalStars}/12 estrelas  •  ${totalDone}/4 fases`, {
+            fontSize: '11px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#ffd200'
+          }).setOrigin(0.5).setAlpha(0.8);
+          createProgressBar(this, W / 2 - 100, progBarY + 14, 200, 6, totalDone / 4, 0xffd200, 0x333366);
+        }
+
+        // Phase cards — staggered entrance
+        const fases = [
+          { key: 'inflacao', icon: '📈', titulo: 'Inflação', cor: 0xe74c3c, desc: 'Por que tudo fica mais caro?', scene: 'SceneInflacao' },
+          { key: 'cambio', icon: '💵', titulo: 'Câmbio', cor: 0x27ae60, desc: 'O dólar sobe e desce?', scene: 'SceneCambio' },
+          { key: 'selic', icon: '🏦', titulo: 'SELIC', cor: 0x2980b9, desc: 'O termostato da economia', scene: 'SceneSelic' },
+          { key: 'conexao', icon: '🔗', titulo: 'Conexão', cor: 0x8e44ad, desc: 'Como tudo se liga!', scene: 'SceneConexao' },
+        ];
+
+        fases.forEach((f, i) => {
+          const x = 90 + (i % 2) * 180;
+          const y = 380 + Math.floor(i / 2) * 100;
+          const finalY = y;
+
+          // Card background
+          const cardBg = this.add.graphics();
+          drawRoundedRect(cardBg, x, finalY, 162, 82, 12, f.cor, 0.85);
+          cardBg.setAlpha(0);
+
+          // Glow on hover
+          const glowBg = this.add.graphics();
+          drawRoundedRect(glowBg, x, finalY, 170, 90, 14, f.cor, 0.3);
+          glowBg.setAlpha(0);
+
+          const titleTxt = this.add.text(x, finalY - 16, f.icon + ' ' + f.titulo, {
+            fontSize: '15px', fontFamily: 'Fredoka One', fill: '#fff'
+          }).setOrigin(0.5).setAlpha(0);
+
+          const descTxt = this.add.text(x, finalY + 8, f.desc, {
+            fontSize: '11px', fontFamily: 'Nunito', fill: '#eee', align: 'center'
+          }).setOrigin(0.5).setAlpha(0);
+
+          // Stars indicator
+          const pData = progress.get(f.key);
+          let starsTxt = null;
+          if (pData.done) {
+            starsTxt = this.add.text(x, finalY + 28, starsText(pData.stars), {
+              fontSize: '12px', fill: '#ffd200'
+            }).setOrigin(0.5).setAlpha(0);
+          }
+
+          // Stagger entrance
+          const delay = 800 + i * 150;
+          this.tweens.add({ targets: cardBg, alpha: 1, duration: 500, delay });
+          this.tweens.add({ targets: titleTxt, alpha: 1, y: finalY - 16, duration: 500, delay: delay + 50 });
+          this.tweens.add({ targets: descTxt, alpha: 1, duration: 400, delay: delay + 100 });
+          if (starsTxt) this.tweens.add({ targets: starsTxt, alpha: 1, duration: 400, delay: delay + 150 });
+
+          // Hit area
+          const hitArea = this.add.rectangle(x, finalY, 162, 82, 0xffffff, 0).setInteractive({ useHandCursor: true });
+          hitArea.on('pointerover', () => {
+            sfx.hover();
+            this.tweens.add({ targets: [cardBg, titleTxt, descTxt, hitArea], scaleX: 1.06, scaleY: 1.06, duration: 150 });
+            glowBg.setAlpha(1);
+          });
+          hitArea.on('pointerout', () => {
+            this.tweens.add({ targets: [cardBg, titleTxt, descTxt, hitArea], scaleX: 1, scaleY: 1, duration: 150 });
+            glowBg.setAlpha(0);
+          });
+          hitArea.on('pointerdown', () => {
+            sfx.click();
+            sfx.whoosh();
+            this.cameras.main.fadeOut(400, 0, 0, 0);
+            this.time.delayedCall(400, () => this.scene.start(f.scene));
+          });
+        });
+
+        // Bottom hint
+        const hint = this.add.text(W / 2, 575, '↑ Clique em uma fase para começar!', {
+          fontSize: '12px', fontFamily: 'Nunito', fill: '#ffd200', align: 'center'
+        }).setOrigin(0.5).setAlpha(0);
+        this.tweens.add({ targets: hint, alpha: 0.7, duration: 500, delay: 1500 });
+        this.tweens.add({ targets: hint, alpha: 0.4, yoyo: true, repeat: -1, duration: 1200, delay: 2000 });
+
+        this.cameras.main.fadeIn(500);
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // CENA 1: INFLAÇÃO — Quiz Expandido
+    // ═══════════════════════════════════════════════
+    class SceneInflacao extends Phaser.Scene {
+      constructor() { super('SceneInflacao'); }
+
+      create() {
+        const W = this.scale.width, H = this.scale.height;
+        this.cameras.main.fadeIn(400);
+
+        // Background
+        const bg = this.add.graphics();
+        bg.fillGradientStyle(0x1a0800, 0x1a0800, 0x2a0a0a, 0x1a0a0a, 1);
+        bg.fillRect(0, 0, W, H);
+        addFloatingParticles(this, 20, 0xff6b6b, 0.05, 0.15);
+
+        // Header
+        const hdrBg = this.add.graphics();
+        hdrBg.fillGradientStyle(0xe74c3c, 0xc0392b, 0xe74c3c, 0xc0392b, 1);
+        hdrBg.fillRect(0, 0, W, 55);
+
+        this.add.text(W / 2, 27, '📈 FASE 1: INFLAÇÃO', {
+          fontSize: '18px', fontFamily: 'Fredoka One', fill: '#fff'
+        }).setOrigin(0.5);
+
+        this.createBtnBack(W);
+        this.contentGroup = [];
+        this.step = 0;
+        this.score = 0;
+        this.showIntro();
+      }
+
+      createBtnBack(W) {
+        const btn = this.add.text(12, 27, '←', {
+          fontSize: '20px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#ffcccc',
+          backgroundColor: '#00000044', padding: { x: 8, y: 2 }
+        }).setOrigin(0, 0.5).setInteractive({ useHandCursor: true });
+        btn.on('pointerdown', () => {
+          sfx.click();
+          this.cameras.main.fadeOut(300, 0, 0, 0);
+          this.time.delayedCall(300, () => this.scene.start('Intro'));
+        });
+      }
+
+      clearContent() {
+        if (this.contentGroup) this.contentGroup.forEach(o => { if (o && o.destroy) o.destroy(); });
+        this.contentGroup = [];
+      }
+      add2(obj) { this.contentGroup.push(obj); return obj; }
+
+      showIntro() {
+        this.clearContent();
+        const W = this.scale.width;
+
+        // Professor Coruja
+        const owl = this.add2(this.add.text(W / 2, 95, '🦉', { fontSize: '48px' }).setOrigin(0.5));
+        this.tweens.add({ targets: owl, y: 90, yoyo: true, repeat: -1, duration: 1500, ease: 'Sine.easeInOut' });
+
+        const bubble = drawSpeechBubble(this, W / 2, 165, 300, 80,
+          'Inflação é quando os preços das\ncoisas SOBEM com o tempo.\nVamos entender por quê!', '13px');
+        this.add2(bubble.graphics);
+        this.add2(bubble.text);
+
+        // Animated price tags
+        const items = [
+          { icon: '🍕', preco: 'R$ 20', novo: 'R$ 35' },
+          { icon: '👟', preco: 'R$ 80', novo: 'R$ 140' },
+          { icon: '📚', preco: 'R$ 30', novo: 'R$ 52' },
+        ];
+        items.forEach((item, i) => {
+          const x = 70 + i * 110;
+          this.add2(this.add.text(x, 260, item.icon, { fontSize: '36px' }).setOrigin(0.5));
+          this.add2(this.add.text(x, 298, item.preco, {
+            fontSize: '13px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#88ff88'
+          }).setOrigin(0.5));
+
+          const arrow = this.add2(this.add.text(x, 318, '⬇', {
+            fontSize: '16px', fill: '#ff6666'
+          }).setOrigin(0.5).setAlpha(0));
+          const tagNew = this.add2(this.add.text(x, 340, item.novo, {
+            fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#ff6666'
+          }).setOrigin(0.5).setAlpha(0));
+
+          this.time.delayedCall(600 + i * 350, () => {
+            this.tweens.add({ targets: arrow, alpha: 1, duration: 300 });
+            this.tweens.add({ targets: tagNew, alpha: 1, y: 338, duration: 500, ease: 'Back.out' });
+          });
+        });
+
+        // Info box
+        const infoBox = this.add2(this.add.graphics());
+        infoBox.fillStyle(0xffdd44, 0.1);
+        infoBox.fillRoundedRect(30, 375, W - 60, 50, 8);
+        infoBox.lineStyle(1, 0xffdd44, 0.3);
+        infoBox.strokeRoundedRect(30, 375, W - 60, 50, 8);
+
+        this.add2(this.add.text(W / 2, 400, '💡 Mais dinheiro + mesmos produtos = INFLAÇÃO!\nO poder de compra do seu dinheiro DIMINUI.', {
+          fontSize: '12px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#ffd966', align: 'center', lineSpacing: 4
+        }).setOrigin(0.5));
+
+        // CTA Button
+        const btnBg = this.add2(this.add.graphics());
+        drawRoundedRect(btnBg, W / 2, 475, 220, 48, 12, 0xe74c3c);
+        const btnTxt = this.add2(this.add.text(W / 2, 475, '▶  Jogar Mini-Desafio!', {
+          fontSize: '16px', fontFamily: 'Fredoka One', fill: '#fff'
+        }).setOrigin(0.5));
+        const btnHit = this.add2(this.add.rectangle(W / 2, 475, 220, 48, 0xffffff, 0).setInteractive({ useHandCursor: true }));
+        btnHit.on('pointerover', () => { sfx.hover(); this.tweens.add({ targets: [btnBg, btnTxt, btnHit], scaleX: 1.05, scaleY: 1.05, duration: 100 }); });
+        btnHit.on('pointerout', () => this.tweens.add({ targets: [btnBg, btnTxt, btnHit], scaleX: 1, scaleY: 1, duration: 100 }));
+        btnHit.on('pointerdown', () => { sfx.click(); this.showQuiz(); });
+
+        // Real data
+        this.add2(this.add.text(W / 2, 535, '📊 Inflação do Brasil em 2024: 4,83% (IPCA)', {
+          fontSize: '11px', fontFamily: 'Nunito', fill: '#888', align: 'center'
+        }).setOrigin(0.5));
+      }
+
+      showQuiz() {
+        this.clearContent();
+        const W = this.scale.width;
+        this.score = 0;
+        this.rodada = 0;
+        this.errosConsec = 0;
+
+        this.add2(this.add.text(W / 2, 80, '🛒 O que causou a inflação?', {
+          fontSize: '16px', fontFamily: 'Fredoka One', fill: '#ffd200', align: 'center'
+        }).setOrigin(0.5));
+
+        this.feedbackTxt = this.add2(this.add.text(W / 2, 110, '', {
+          fontSize: '12px', fontFamily: 'Nunito', fill: '#00ffaa', align: 'center',
+          wordWrap: { width: 300 }
+        }).setOrigin(0.5));
+
+        // Progress bar area
+        this.quizProgBar = this.add2(createProgressBar(this, 30, 138, W - 60, 8, 0, 0xffd200, 0x333344));
+
+        this.scoreTxt = this.add2(this.add.text(W - 25, 80, '⭐ 0', {
+          fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#ffd200'
+        }).setOrigin(1, 0.5));
+
+        // All questions pool — pick 3 random
+        this.allPerguntas = [
+          {
+            q: 'O governo imprimiu MUITO dinheiro\nsem aumentar a produção.\nO que acontece com os preços?',
+            opcoes: ['Sobem 📈', 'Ficam iguais 😐', 'Caem 📉'],
+            correta: 0,
+            exp: 'Mais dinheiro + mesmos produtos = inflação!'
+          },
+          {
+            q: 'Uma seca destruiu as lavouras.\nAgora tem pouca comida disponível.\nO que acontece com os preços?',
+            opcoes: ['Caem 📉', 'Sobem 📈', 'Somem 🫥'],
+            correta: 1,
+            exp: 'Pouca oferta + mesma demanda = preço sobe!'
+          },
+          {
+            q: 'O banco central AUMENTOU os juros.\nO que tende a acontecer\ncom a inflação?',
+            opcoes: ['Aumenta mais', 'Diminui 📉', 'Não muda'],
+            correta: 1,
+            exp: 'Juros altos freiam o consumo e a inflação!'
+          },
+          {
+            q: 'O preço do petróleo DOBROU\nno mundo todo.\nO que acontece com os preços\nno Brasil?',
+            opcoes: ['Caem', 'Sobem 📈', 'Só gasolina muda'],
+            correta: 1,
+            exp: 'Petróleo caro encarece transporte, comida, tudo!'
+          },
+          {
+            q: 'Todos receberam um aumento\nsalarial de 50%, mas a produção\nnão mudou. O que acontece?',
+            opcoes: ['Preços caem', 'Nada muda', 'Inflação sobe 📈'],
+            correta: 2,
+            exp: 'Mais renda sem mais produção = mais demanda = inflação!'
+          }
+        ];
+
+        // Shuffle and pick 3
+        this.perguntas = Phaser.Utils.Array.Shuffle([...this.allPerguntas]).slice(0, 3);
+        this.perguntaGroup = [];
+        this.mostrarPergunta();
+      }
+
+      mostrarPergunta() {
+        const W = this.scale.width;
+        if (this.perguntaGroup) this.perguntaGroup.forEach(o => { if (o && o.destroy) o.destroy(); });
+        this.perguntaGroup = [];
+
+        // Update progress bar
+        if (this.quizProgBar) this.quizProgBar.destroy();
+        this.quizProgBar = this.add2(createProgressBar(this, 30, 138, W - 60, 8, this.rodada / this.perguntas.length, 0xffd200, 0x333344));
+
+        if (this.rodada >= this.perguntas.length) {
+          this.showResult();
+          return;
+        }
+
+        const p = this.perguntas[this.rodada];
+        const qtxt = this.add.text(W / 2, 220, p.q, {
+          fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff',
+          align: 'center', lineSpacing: 5, wordWrap: { width: 300 }
+        }).setOrigin(0.5);
+        this.perguntaGroup.push(qtxt);
+
+        p.opcoes.forEach((op, i) => {
+          const btnBg = this.add.graphics();
+          const btnY = 330 + i * 62;
+          drawRoundedRect(btnBg, W / 2, btnY, 260, 44, 10, 0x2c3e50);
+          const btnTxt = this.add.text(W / 2, btnY, op, {
+            fontSize: '15px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff'
+          }).setOrigin(0.5);
+          const btnHit = this.add.rectangle(W / 2, btnY, 260, 44, 0xffffff, 0).setInteractive({ useHandCursor: true });
+
+          btnHit.on('pointerover', () => {
+            sfx.hover();
+            btnBg.clear(); drawRoundedRect(btnBg, W / 2, btnY, 260, 44, 10, 0x3d5570);
+          });
+          btnHit.on('pointerout', () => { btnBg.clear(); drawRoundedRect(btnBg, W / 2, btnY, 260, 44, 10, 0x2c3e50); });
+
+          btnHit.on('pointerdown', () => {
+            // Disable all
+            this.perguntaGroup.forEach(o => { if (o.disableInteractive) o.disableInteractive(); });
+            if (i === p.correta) {
+              this.score++;
+              this.errosConsec = 0;
+              sfx.correct();
+              btnBg.clear(); drawRoundedRect(btnBg, W / 2, btnY, 260, 44, 10, 0x27ae60);
+              this.feedbackTxt.setText('✅ ' + p.exp).setStyle({ fill: '#66ff99' });
+              this.scoreTxt.setText(`⭐ ${this.score}`);
+              this.tweens.add({ targets: this.scoreTxt, scaleX: 1.4, scaleY: 1.4, yoyo: true, duration: 200 });
+              addConfetti(this, W / 2, btnY, 15);
+              this.cameras.main.flash(200, 0, 150, 0, false);
+            } else {
+              this.errosConsec++;
+              sfx.wrong();
+              btnBg.clear(); drawRoundedRect(btnBg, W / 2, btnY, 260, 44, 10, 0xe74c3c);
+              let hint = '❌ ' + p.exp;
+              if (this.errosConsec >= 2) {
+                hint += '\n🦉 Dica: pense em oferta e demanda!';
+              }
+              this.feedbackTxt.setText(hint).setStyle({ fill: '#ff6666' });
+              this.cameras.main.shake(200, 0.008);
+            }
+            this.rodada++;
+            this.time.delayedCall(1800, () => {
+              this.feedbackTxt.setText('');
+              this.mostrarPergunta();
+            });
+          });
+
+          this.perguntaGroup.push(btnBg, btnTxt, btnHit);
+        });
+
+        // Add all to content for cleanup
+        this.perguntaGroup.forEach(o => this.add2(o));
+      }
+
+      showResult() {
+        this.clearContent();
+        if (this.perguntaGroup) this.perguntaGroup.forEach(o => { if (o && o.destroy) o.destroy(); });
+        const W = this.scale.width;
+
+        const stars = this.score >= 3 ? 3 : this.score >= 2 ? 2 : this.score >= 1 ? 1 : 0;
+        progress.complete('inflacao', stars, this.score);
+
+        const emoji = this.score >= 2 ? '🏆' : '📚';
+        const msg = this.score >= 2 ? 'Incrível! Você entendeu\no que é INFLAÇÃO!' : 'Quase lá! Tente de novo\npara fixar o conceito.';
+
+        if (this.score >= 2) { sfx.fanfare(); addConfetti(this, W / 2, 200, 30); }
+
+        this.add.text(W / 2, 140, emoji, { fontSize: '56px' }).setOrigin(0.5);
+        this.add.text(W / 2, 210, msg, {
+          fontSize: '17px', fontFamily: 'Fredoka One', fill: '#ffd200', align: 'center', lineSpacing: 6
+        }).setOrigin(0.5);
+        this.add.text(W / 2, 270, `Acertos: ${this.score}/3`, {
+          fontSize: '16px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff'
+        }).setOrigin(0.5);
+
+        this.add.text(W / 2, 300, starsText(stars), {
+          fontSize: '24px', fill: '#ffd200'
+        }).setOrigin(0.5);
+
+        const btns = [
+          { label: '🔄  Tentar de novo', cor: 0x8e44ad, action: () => this.showQuiz() },
+          { label: '💵  Fase: Câmbio →', cor: 0x27ae60, action: () => { this.cameras.main.fadeOut(300, 0, 0, 0); this.time.delayedCall(300, () => this.scene.start('SceneCambio')); } },
+          { label: '←  Menu', cor: 0x555555, action: () => { this.cameras.main.fadeOut(300, 0, 0, 0); this.time.delayedCall(300, () => this.scene.start('Intro')); } },
+        ];
+        btns.forEach((b, i) => {
+          const btnY = 370 + i * 58;
+          const bg = this.add.graphics();
+          drawRoundedRect(bg, W / 2, btnY, 220, 42, 10, b.cor);
+          const txt = this.add.text(W / 2, btnY, b.label, {
+            fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff'
+          }).setOrigin(0.5);
+          const hit = this.add.rectangle(W / 2, btnY, 220, 42, 0xffffff, 0).setInteractive({ useHandCursor: true });
+          hit.on('pointerover', () => { sfx.hover(); this.tweens.add({ targets: [bg, txt, hit], scaleX: 1.04, scaleY: 1.04, duration: 100 }); });
+          hit.on('pointerout', () => this.tweens.add({ targets: [bg, txt, hit], scaleX: 1, scaleY: 1, duration: 100 }));
+          hit.on('pointerdown', () => { sfx.click(); b.action(); });
+        });
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // CENA 2: CÂMBIO — Mini-jogo "Importador"
+    // ═══════════════════════════════════════════════
+    class SceneCambio extends Phaser.Scene {
+      constructor() { super('SceneCambio'); }
+
+      create() {
+        const W = this.scale.width, H = this.scale.height;
+        this.cameras.main.fadeIn(400);
+
+        const bg = this.add.graphics();
+        bg.fillGradientStyle(0x001a0a, 0x001a0a, 0x002a1a, 0x001a0a, 1);
+        bg.fillRect(0, 0, W, H);
+        addFloatingParticles(this, 15, 0x27ae60, 0.05, 0.15);
+
+        // Header
+        const hdr = this.add.graphics();
+        hdr.fillGradientStyle(0x27ae60, 0x1e8449, 0x27ae60, 0x1e8449, 1);
+        hdr.fillRect(0, 0, W, 55);
+        this.add.text(W / 2, 27, '💵 FASE 2: CÂMBIO', {
+          fontSize: '18px', fontFamily: 'Fredoka One', fill: '#fff'
+        }).setOrigin(0.5);
+        this.createBtnBack();
+
+        this.contentGroup = [];
+        this.showExplicacao();
+      }
+
+      createBtnBack() {
+        const btn = this.add.text(12, 27, '←', {
+          fontSize: '20px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#aaffaa',
+          backgroundColor: '#00000044', padding: { x: 8, y: 2 }
+        }).setOrigin(0, 0.5).setInteractive({ useHandCursor: true });
+        btn.on('pointerdown', () => {
+          sfx.click();
+          this.cameras.main.fadeOut(300, 0, 0, 0);
+          this.time.delayedCall(300, () => this.scene.start('Intro'));
+        });
+      }
+
+      clearContent() {
+        if (this.contentGroup) this.contentGroup.forEach(o => { if (o && o.destroy) o.destroy(); });
+        this.contentGroup = [];
+      }
+      add2(obj) { this.contentGroup.push(obj); return obj; }
+
+      showExplicacao() {
+        this.clearContent();
+        const W = this.scale.width;
+
+        const owl = this.add2(this.add.text(W / 2, 90, '🦉', { fontSize: '40px' }).setOrigin(0.5));
+        this.tweens.add({ targets: owl, y: 86, yoyo: true, repeat: -1, duration: 1500, ease: 'Sine.easeInOut' });
+
+        const bubble = drawSpeechBubble(this, W / 2, 155, 300, 90,
+          'O dólar é como uma moeda "universal".\nQuando o Brasil vai bem, o Real fica\nforte e o dólar fica barato.\nQuando há incerteza, o dólar sobe!', '12px');
+        this.add2(bubble.graphics);
+        this.add2(bubble.text);
+
+        // Info box
+        const info = this.add2(this.add.graphics());
+        info.fillStyle(0x27ae60, 0.1);
+        info.fillRoundedRect(20, 215, W - 40, 60, 8);
+        info.lineStyle(1, 0x27ae60, 0.3);
+        info.strokeRoundedRect(20, 215, W - 40, 60, 8);
+        this.add2(this.add.text(W / 2, 245, '💡 Dólar alto = importação cara = inflação sobe\n💡 Dólar baixo = exportação menos competitiva', {
+          fontSize: '11px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#66ffaa', align: 'center', lineSpacing: 4
+        }).setOrigin(0.5));
+
+        // CTA to game
+        const btnBg = this.add2(this.add.graphics());
+        drawRoundedRect(btnBg, W / 2, 310, 260, 48, 12, 0x27ae60);
+        const btnTxt = this.add2(this.add.text(W / 2, 310, '🎮  Jogar: Importador!', {
+          fontSize: '16px', fontFamily: 'Fredoka One', fill: '#fff'
+        }).setOrigin(0.5));
+        const btnHit = this.add2(this.add.rectangle(W / 2, 310, 260, 48, 0xffffff, 0).setInteractive({ useHandCursor: true }));
+        btnHit.on('pointerover', () => { sfx.hover(); this.tweens.add({ targets: [btnBg, btnTxt, btnHit], scaleX: 1.05, scaleY: 1.05, duration: 100 }); });
+        btnHit.on('pointerout', () => this.tweens.add({ targets: [btnBg, btnTxt, btnHit], scaleX: 1, scaleY: 1, duration: 100 }));
+        btnHit.on('pointerdown', () => { sfx.click(); this.showGame(); });
+
+        this.add2(this.add.text(W / 2, 370, '📊 O dólar variou de R$4,85 a R$6,27 em 2024', {
+          fontSize: '11px', fontFamily: 'Nunito', fill: '#666', align: 'center'
+        }).setOrigin(0.5));
+      }
+
+      showGame() {
+        this.clearContent();
+        const W = this.scale.width;
+
+        this.cotacao = 5.00;
+        this.historico = [5.00];
+        this.rodada = 0;
+        this.totalRodadas = 5;
+        this.totalGasto = 0;
+        this.compras = 0;
+        this.budget = 50000; // R$ to spend on imports
+
+        this.add2(this.add.text(W / 2, 75, '🏭 Você é um importador!', {
+          fontSize: '15px', fontFamily: 'Fredoka One', fill: '#ffd200'
+        }).setOrigin(0.5));
+        this.add2(this.add.text(W / 2, 98, 'Precisa comprar 3 lotes de US$ 10.000.\nEscolha quando comprar dólar!', {
+          fontSize: '12px', fontFamily: 'Nunito', fill: '#ccc', align: 'center', lineSpacing: 3
+        }).setOrigin(0.5));
+
+        // Cotação display
+        const painelBg = this.add2(this.add.graphics());
+        painelBg.fillStyle(0x0a2a1a, 0.9);
+        painelBg.fillRoundedRect(30, 125, W - 60, 70, 10);
+        painelBg.lineStyle(2, 0x27ae60, 0.6);
+        painelBg.strokeRoundedRect(30, 125, W - 60, 70, 10);
+
+        this.cotTxt = this.add2(this.add.text(W / 2, 145, `💵 USD/BRL: R$ ${this.cotacao.toFixed(2)}`, {
+          fontSize: '20px', fontFamily: 'Fredoka One', fill: '#ffd200'
+        }).setOrigin(0.5));
+
+        this.rodadaTxt = this.add2(this.add.text(W / 2, 172, `Rodada 1/${this.totalRodadas} • Compras: 0/3`, {
+          fontSize: '12px', fontFamily: 'Nunito', fill: '#aaa'
+        }).setOrigin(0.5));
+
+        // Chart area
+        this.chartGraphics = this.add2(this.add.graphics());
+        this.chartX = 40;
+        this.chartY = 210;
+        this.chartW = W - 80;
+        this.chartH = 100;
+        this.drawChart();
+
+        // Event display
+        this.eventTxt = this.add2(this.add.text(W / 2, 335, '', {
+          fontSize: '13px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff', align: 'center',
+          wordWrap: { width: 280 }
+        }).setOrigin(0.5));
+
+        // Feedback
+        this.feedbackTxt = this.add2(this.add.text(W / 2, 370, '', {
+          fontSize: '12px', fontFamily: 'Nunito', fill: '#aaa', align: 'center'
+        }).setOrigin(0.5));
+
+        // Buttons
+        const buyBg = this.add2(this.add.graphics());
+        drawRoundedRect(buyBg, W / 2 - 78, 420, 140, 44, 10, 0x27ae60);
+        const buyTxt = this.add2(this.add.text(W / 2 - 78, 420, '💰 COMPRAR', {
+          fontSize: '14px', fontFamily: 'Fredoka One', fill: '#fff'
+        }).setOrigin(0.5));
+        this.buyHit = this.add2(this.add.rectangle(W / 2 - 78, 420, 140, 44, 0xffffff, 0).setInteractive({ useHandCursor: true }));
+
+        const waitBg = this.add2(this.add.graphics());
+        drawRoundedRect(waitBg, W / 2 + 78, 420, 140, 44, 10, 0xe67e22);
+        const waitTxt = this.add2(this.add.text(W / 2 + 78, 420, '⏳ ESPERAR', {
+          fontSize: '14px', fontFamily: 'Fredoka One', fill: '#fff'
+        }).setOrigin(0.5));
+        this.waitHit = this.add2(this.add.rectangle(W / 2 + 78, 420, 140, 44, 0xffffff, 0).setInteractive({ useHandCursor: true }));
+
+        this.buyHit.on('pointerover', () => { sfx.hover(); this.tweens.add({ targets: [buyBg, buyTxt, this.buyHit], scaleX: 1.05, scaleY: 1.05, duration: 100 }); });
+        this.buyHit.on('pointerout', () => this.tweens.add({ targets: [buyBg, buyTxt, this.buyHit], scaleX: 1, scaleY: 1, duration: 100 }));
+        this.buyHit.on('pointerdown', () => this.handleDecision('buy'));
+
+        this.waitHit.on('pointerover', () => { sfx.hover(); this.tweens.add({ targets: [waitBg, waitTxt, this.waitHit], scaleX: 1.05, scaleY: 1.05, duration: 100 }); });
+        this.waitHit.on('pointerout', () => this.tweens.add({ targets: [waitBg, waitTxt, this.waitHit], scaleX: 1, scaleY: 1, duration: 100 }));
+        this.waitHit.on('pointerdown', () => this.handleDecision('wait'));
+
+        this.gastoTxt = this.add2(this.add.text(W / 2, 465, `Total gasto: R$ 0`, {
+          fontSize: '12px', fontFamily: 'Nunito', fill: '#aaa'
+        }).setOrigin(0.5));
+
+        // Events pool
+        this.eventos = [
+          { text: '📉 Exportações brasileiras caíram 15%', delta: +0.45 },
+          { text: '📈 Banco Central subiu a SELIC', delta: -0.40 },
+          { text: '😨 Crise política no Congresso!', delta: +0.70 },
+          { text: '🌟 Investidores estrangeiros entraram no Brasil', delta: -0.55 },
+          { text: '⛽ Petróleo subiu no mercado internacional', delta: +0.35 },
+          { text: '🌾 Safra recorde de soja no Brasil!', delta: -0.30 },
+          { text: '📊 EUA aumentaram seus juros', delta: +0.50 },
+          { text: '🏆 Brasil recebeu upgrade de rating', delta: -0.45 },
+        ];
+        this.shuffledEvents = Phaser.Utils.Array.Shuffle([...this.eventos]);
+
+        this.showNextEvent();
+      }
+
+      showNextEvent() {
+        if (this.rodada >= this.totalRodadas || this.compras >= 3) {
+          this.finishGame();
+          return;
+        }
+        const ev = this.shuffledEvents[this.rodada % this.shuffledEvents.length];
+        this.currentEvent = ev;
+        this.cotacao = Math.max(3.5, Math.min(8.0, this.cotacao + ev.delta));
+        this.historico.push(this.cotacao);
+
+        this.cotTxt.setText(`💵 USD/BRL: R$ ${this.cotacao.toFixed(2)}`);
+        const cor = ev.delta > 0 ? '#ff6666' : '#66ff99';
+        this.cotTxt.setStyle({ fill: cor, fontFamily: 'Fredoka One', fontSize: '20px' });
+        this.time.delayedCall(600, () => this.cotTxt.setStyle({ fill: '#ffd200', fontFamily: 'Fredoka One', fontSize: '20px' }));
+
+        this.eventTxt.setText(ev.text);
+        this.rodadaTxt.setText(`Rodada ${this.rodada + 1}/${this.totalRodadas} • Compras: ${this.compras}/3`);
+
+        this.drawChart();
+
+        if (ev.delta > 0) {
+          this.cameras.main.shake(200, 0.004);
+        } else {
+          this.cameras.main.flash(200, 0, 80, 0, false);
+        }
+      }
+
+      handleDecision(choice) {
+        sfx.click();
+        if (choice === 'buy' && this.compras < 3) {
+          const custo = 10000 * this.cotacao;
+          this.totalGasto += custo;
+          this.compras++;
+          sfx.correct();
+          this.feedbackTxt.setText(`Comprou US$10k a R$${this.cotacao.toFixed(2)} = R$${custo.toFixed(0)}`).setStyle({ fill: '#66ff99', fontFamily: 'Nunito', fontSize: '12px' });
+          this.gastoTxt.setText(`Total gasto: R$ ${this.totalGasto.toFixed(0)}`);
+          addConfetti(this, this.scale.width / 2, 420, 8);
+        } else if (choice === 'wait') {
+          this.feedbackTxt.setText('Esperando próximo evento...').setStyle({ fill: '#ffd200', fontFamily: 'Nunito', fontSize: '12px' });
+        }
+
+        this.buyHit.disableInteractive();
+        this.waitHit.disableInteractive();
+
+        this.rodada++;
+        this.time.delayedCall(1000, () => {
+          this.buyHit.setInteractive({ useHandCursor: true });
+          this.waitHit.setInteractive({ useHandCursor: true });
+          this.showNextEvent();
+        });
+      }
+
+      drawChart() {
+        const g = this.chartGraphics;
+        g.clear();
+
+        // Background
+        g.fillStyle(0x0a2a1a, 0.5);
+        g.fillRoundedRect(this.chartX - 10, this.chartY - 10, this.chartW + 20, this.chartH + 25, 8);
+
+        // Grid lines
+        g.lineStyle(1, 0x27ae60, 0.15);
+        for (let i = 0; i <= 4; i++) {
+          const yy = this.chartY + (this.chartH / 4) * i;
+          g.lineBetween(this.chartX, yy, this.chartX + this.chartW, yy);
+        }
+
+        if (this.historico.length < 2) return;
+
+        const minV = Math.min(...this.historico) - 0.5;
+        const maxV = Math.max(...this.historico) + 0.5;
+        const range = maxV - minV || 1;
+
+        // Draw line
+        g.lineStyle(3, 0x27ae60, 0.9);
+        g.beginPath();
+        this.historico.forEach((v, i) => {
+          const px = this.chartX + (i / Math.max(this.totalRodadas, this.historico.length - 1)) * this.chartW;
+          const py = this.chartY + this.chartH - ((v - minV) / range) * this.chartH;
+          if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+        });
+        g.strokePath();
+
+        // Dots
+        this.historico.forEach((v, i) => {
+          const px = this.chartX + (i / Math.max(this.totalRodadas, this.historico.length - 1)) * this.chartW;
+          const py = this.chartY + this.chartH - ((v - minV) / range) * this.chartH;
+          g.fillStyle(0xffd200, 1);
+          g.fillCircle(px, py, 4);
+        });
+
+        // Labels
+        g.fillStyle(0x888888, 1);
+      }
+
+      finishGame() {
+        // Force buy remaining
+        while (this.compras < 3) {
+          this.totalGasto += 10000 * this.cotacao;
+          this.compras++;
+        }
+
+        const bestPossible = 10000 * 3 * Math.min(...this.historico);
+        const efficiency = bestPossible / this.totalGasto;
+        const stars = efficiency > 0.9 ? 3 : efficiency > 0.75 ? 2 : 1;
+        progress.complete('cambio', stars, Math.round(efficiency * 100));
+
+        this.clearContent();
+        const W = this.scale.width;
+
+        if (stars >= 2) { sfx.fanfare(); addConfetti(this, W / 2, 200, 25); }
+
+        this.add.text(W / 2, 120, stars >= 2 ? '🏆' : '📊', { fontSize: '56px' }).setOrigin(0.5);
+        this.add.text(W / 2, 185, 'Resultado do Importador', {
+          fontSize: '18px', fontFamily: 'Fredoka One', fill: '#ffd200'
+        }).setOrigin(0.5);
+
+        this.add.text(W / 2, 230, `Você gastou: R$ ${this.totalGasto.toFixed(0)}\nMelhor possível: R$ ${bestPossible.toFixed(0)}\nEficiência: ${(efficiency * 100).toFixed(0)}%`, {
+          fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff', align: 'center', lineSpacing: 6
+        }).setOrigin(0.5);
+
+        this.add.text(W / 2, 295, starsText(stars), { fontSize: '24px', fill: '#ffd200' }).setOrigin(0.5);
+
+        const btns = [
+          { label: '🔄  Tentar de novo', cor: 0x8e44ad, action: () => { sfx.click(); this.showGame(); } },
+          { label: '🏦  Fase: SELIC →', cor: 0x2980b9, action: () => { sfx.click(); this.cameras.main.fadeOut(300, 0, 0, 0); this.time.delayedCall(300, () => this.scene.start('SceneSelic')); } },
+          { label: '←  Menu', cor: 0x555555, action: () => { sfx.click(); this.cameras.main.fadeOut(300, 0, 0, 0); this.time.delayedCall(300, () => this.scene.start('Intro')); } },
+        ];
+        btns.forEach((b, i) => {
+          const btnY = 350 + i * 58;
+          const bg = this.add.graphics();
+          drawRoundedRect(bg, W / 2, btnY, 220, 42, 10, b.cor);
+          const txt = this.add.text(W / 2, btnY, b.label, {
+            fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff'
+          }).setOrigin(0.5);
+          const hit = this.add.rectangle(W / 2, btnY, 220, 42, 0xffffff, 0).setInteractive({ useHandCursor: true });
+          hit.on('pointerover', () => { sfx.hover(); this.tweens.add({ targets: [bg, txt, hit], scaleX: 1.04, scaleY: 1.04, duration: 100 }); });
+          hit.on('pointerout', () => this.tweens.add({ targets: [bg, txt, hit], scaleX: 1, scaleY: 1, duration: 100 }));
+          hit.on('pointerdown', b.action);
+        });
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // CENA 3: SELIC — "Presidente do Banco Central"
+    // ═══════════════════════════════════════════════
+    class SceneSelic extends Phaser.Scene {
+      constructor() { super('SceneSelic'); }
+
+      create() {
+        const W = this.scale.width, H = this.scale.height;
+        this.cameras.main.fadeIn(400);
+
+        const bg = this.add.graphics();
+        bg.fillGradientStyle(0x000a1a, 0x000a1a, 0x001030, 0x000a20, 1);
+        bg.fillRect(0, 0, W, H);
+        addFloatingParticles(this, 15, 0x2980b9, 0.05, 0.15);
+
+        const hdr = this.add.graphics();
+        hdr.fillGradientStyle(0x2980b9, 0x1f6fa8, 0x2980b9, 0x1f6fa8, 1);
+        hdr.fillRect(0, 0, W, 55);
+        this.add.text(W / 2, 27, '🏦 FASE 3: A SELIC', {
+          fontSize: '18px', fontFamily: 'Fredoka One', fill: '#fff'
+        }).setOrigin(0.5);
+        this.createBtnBack();
+
+        this.contentGroup = [];
+        this.showExplicacao();
+      }
+
+      createBtnBack() {
+        const btn = this.add.text(12, 27, '←', {
+          fontSize: '20px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#aaccff',
+          backgroundColor: '#00000044', padding: { x: 8, y: 2 }
+        }).setOrigin(0, 0.5).setInteractive({ useHandCursor: true });
+        btn.on('pointerdown', () => {
+          sfx.click();
+          this.cameras.main.fadeOut(300, 0, 0, 0);
+          this.time.delayedCall(300, () => this.scene.start('Intro'));
+        });
+      }
+
+      clearContent() {
+        if (this.contentGroup) this.contentGroup.forEach(o => { if (o && o.destroy) o.destroy(); });
+        this.contentGroup = [];
+      }
+      add2(obj) { this.contentGroup.push(obj); return obj; }
+
+      showExplicacao() {
+        this.clearContent();
+        const W = this.scale.width;
+
+        const owl = this.add2(this.add.text(W / 2, 90, '🦉', { fontSize: '40px' }).setOrigin(0.5));
+        this.tweens.add({ targets: owl, y: 86, yoyo: true, repeat: -1, duration: 1500, ease: 'Sine.easeInOut' });
+
+        const bubble = drawSpeechBubble(this, W / 2, 158, 310, 80,
+          'A SELIC é a taxa básica de juros\ndo Brasil. Funciona como um\ntermostato da economia!', '13px');
+        this.add2(bubble.graphics);
+        this.add2(bubble.text);
+
+        // Rules box
+        const rules = this.add2(this.add.graphics());
+        rules.fillStyle(0x2980b9, 0.1);
+        rules.fillRoundedRect(15, 215, W - 30, 75, 8);
+        rules.lineStyle(1, 0x2980b9, 0.3);
+        rules.strokeRoundedRect(15, 215, W - 30, 75, 8);
+        this.add2(this.add.text(W / 2, 252, '📈 SELIC alta → crédito caro → menos consumo → inflação cai\n📉 SELIC baixa → crédito barato → mais consumo → economia cresce', {
+          fontSize: '11px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#c8e0ff', align: 'center', lineSpacing: 6
+        }).setOrigin(0.5));
+
+        // CTA
+        const btnBg = this.add2(this.add.graphics());
+        drawRoundedRect(btnBg, W / 2, 330, 280, 48, 12, 0x2980b9);
+        const btnTxt = this.add2(this.add.text(W / 2, 330, '🎮  Desafio: Presidente do BC', {
+          fontSize: '15px', fontFamily: 'Fredoka One', fill: '#fff'
+        }).setOrigin(0.5));
+        const btnHit = this.add2(this.add.rectangle(W / 2, 330, 280, 48, 0xffffff, 0).setInteractive({ useHandCursor: true }));
+        btnHit.on('pointerover', () => { sfx.hover(); this.tweens.add({ targets: [btnBg, btnTxt, btnHit], scaleX: 1.05, scaleY: 1.05, duration: 100 }); });
+        btnHit.on('pointerout', () => this.tweens.add({ targets: [btnBg, btnTxt, btnHit], scaleX: 1, scaleY: 1, duration: 100 }));
+        btnHit.on('pointerdown', () => { sfx.click(); this.showGame(); });
+
+        this.add2(this.add.text(W / 2, 390, '📊 SELIC atual (2025): 14,75% a.a.', {
+          fontSize: '11px', fontFamily: 'Nunito', fill: '#666', align: 'center'
+        }).setOrigin(0.5));
+      }
+
+      showGame() {
+        this.clearContent();
+        const W = this.scale.width;
+
+        this.selic = 10.0;
+        this.inflacao = 7.5; // Start high
+        this.pib = 1.5;
+        this.rodada = 0;
+        this.maxRodadas = 6;
+        this.metaInflacao = { min: 3.0, max: 4.5 };
+        this.pendingEffects = [];
+
+        this.add2(this.add.text(W / 2, 75, '🎯 Meta: Leve a inflação para 3-4.5%', {
+          fontSize: '14px', fontFamily: 'Fredoka One', fill: '#ffd200'
+        }).setOrigin(0.5));
+
+        this.rodadaTxt = this.add2(this.add.text(W / 2, 98, `Rodada 1/${this.maxRodadas}`, {
+          fontSize: '12px', fontFamily: 'Nunito', fill: '#aaa'
+        }).setOrigin(0.5));
+
+        // Gauges panel
+        const panel = this.add2(this.add.graphics());
+        panel.fillStyle(0x0d1a30, 0.9);
+        panel.fillRoundedRect(15, 115, W - 30, 110, 12);
+        panel.lineStyle(2, 0x2980b9, 0.4);
+        panel.strokeRoundedRect(15, 115, W - 30, 110, 12);
+
+        // SELIC gauge
+        this.selicTxt = this.add2(this.add.text(65, 145, `🏦 SELIC\n${this.selic.toFixed(1)}%`, {
+          fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#ffd200', align: 'center', lineSpacing: 2
+        }).setOrigin(0.5));
+        this.selicBar = this.add2(createProgressBar(this, 25, 172, 80, 8, this.selic / 20, 0xffd200, 0x333355));
+
+        // Inflação gauge
+        this.inflTxt = this.add2(this.add.text(W / 2, 145, `📈 Inflação\n${this.inflacao.toFixed(1)}%`, {
+          fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#ff8866', align: 'center', lineSpacing: 2
+        }).setOrigin(0.5));
+        this.inflBar = this.add2(createProgressBar(this, W / 2 - 40, 172, 80, 8, this.inflacao / 15, 0xff6644, 0x333355));
+
+        // PIB gauge
+        this.pibTxt = this.add2(this.add.text(W - 65, 145, `🌱 PIB\n+${this.pib.toFixed(1)}%`, {
+          fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#66ffaa', align: 'center', lineSpacing: 2
+        }).setOrigin(0.5));
+        this.pibBar = this.add2(createProgressBar(this, W - 105, 172, 80, 8, (this.pib + 2) / 10, 0x66ff66, 0x333355));
+
+        // Meta zone indicator
+        this.metaTxt = this.add2(this.add.text(W / 2, 200, '⚠️ Inflação acima da meta!', {
+          fontSize: '12px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#ff6644'
+        }).setOrigin(0.5));
+
+        // Event display
+        this.eventTxt = this.add2(this.add.text(W / 2, 240, '', {
+          fontSize: '12px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff',
+          align: 'center', wordWrap: { width: 300 }
+        }).setOrigin(0.5));
+
+        // Action buttons
+        const upBg = this.add2(this.add.graphics());
+        drawRoundedRect(upBg, W / 2 - 78, 295, 140, 44, 10, 0xe74c3c);
+        const upTxt = this.add2(this.add.text(W / 2 - 78, 295, '⬆ Subir SELIC', {
+          fontSize: '14px', fontFamily: 'Fredoka One', fill: '#fff'
+        }).setOrigin(0.5));
+        this.upHit = this.add2(this.add.rectangle(W / 2 - 78, 295, 140, 44, 0xffffff, 0).setInteractive({ useHandCursor: true }));
+
+        const downBg = this.add2(this.add.graphics());
+        drawRoundedRect(downBg, W / 2 + 78, 295, 140, 44, 10, 0x27ae60);
+        const downTxt = this.add2(this.add.text(W / 2 + 78, 295, '⬇ Baixar SELIC', {
+          fontSize: '14px', fontFamily: 'Fredoka One', fill: '#fff'
+        }).setOrigin(0.5));
+        this.downHit = this.add2(this.add.rectangle(W / 2 + 78, 295, 140, 44, 0xffffff, 0).setInteractive({ useHandCursor: true }));
+
+        const mantBg = this.add2(this.add.graphics());
+        drawRoundedRect(mantBg, W / 2, 348, 180, 36, 10, 0x7f8c8d);
+        const mantTxt = this.add2(this.add.text(W / 2, 348, '⏸ Manter SELIC', {
+          fontSize: '13px', fontFamily: 'Fredoka One', fill: '#fff'
+        }).setOrigin(0.5));
+        this.mantHit = this.add2(this.add.rectangle(W / 2, 348, 180, 36, 0xffffff, 0).setInteractive({ useHandCursor: true }));
+
+        this.upHit.on('pointerover', () => sfx.hover());
+        this.downHit.on('pointerover', () => sfx.hover());
+        this.mantHit.on('pointerover', () => sfx.hover());
+
+        this.upHit.on('pointerdown', () => this.ajustarSelic(+1.5));
+        this.downHit.on('pointerdown', () => this.ajustarSelic(-1.5));
+        this.mantHit.on('pointerdown', () => this.ajustarSelic(0));
+
+        // Feedback
+        this.feedbackSelic = this.add2(this.add.text(W / 2, 395, '', {
+          fontSize: '12px', fontFamily: 'Nunito', fill: '#ffd200', align: 'center',
+          wordWrap: { width: 300 }, lineSpacing: 3
+        }).setOrigin(0.5));
+
+        // Delayed effects info
+        this.add2(this.add.text(W / 2, 448, '💡 O efeito da SELIC leva 1 rodada para\naparecer — igual na vida real!', {
+          fontSize: '11px', fontFamily: 'Nunito', fill: '#6688aa', align: 'center', lineSpacing: 3
+        }).setOrigin(0.5));
+
+        // Random events pool
+        this.eventosRandom = [
+          { text: '🌾 Seca no Sul atingiu a produção agrícola', inflacao: +1.0, pib: -0.3 },
+          { text: '⛽ Petróleo subiu 20% no mercado mundial', inflacao: +0.8, pib: -0.2 },
+          { text: '📦 Supersafra! Alimentos baratearam', inflacao: -0.5, pib: +0.2 },
+          { text: '💵 Dólar subiu 10% em uma semana', inflacao: +0.6, pib: -0.1 },
+          { text: '🏭 Nova fábrica abriu 5000 empregos', inflacao: +0.2, pib: +0.5 },
+          { text: '📊 Confiança do consumidor em alta!', inflacao: +0.3, pib: +0.4 },
+        ];
+
+        this.applyPendingAndShowEvent();
+      }
+
+      applyPendingAndShowEvent() {
+        const W = this.scale.width;
+        // Apply delayed SELIC effects
+        if (this.pendingEffects.length > 0) {
+          const effect = this.pendingEffects.shift();
+          this.inflacao = Math.max(0.5, Math.min(15, this.inflacao + effect.inflacao));
+          this.pib = Math.max(-3, Math.min(8, this.pib + effect.pib));
+        }
+
+        // Random event
+        if (this.rodada > 0 && this.rodada < this.maxRodadas) {
+          const ev = Phaser.Math.RND.pick(this.eventosRandom);
+          this.inflacao = Math.max(0.5, Math.min(15, this.inflacao + ev.inflacao));
+          this.pib = Math.max(-3, Math.min(8, this.pib + ev.pib));
+          this.eventTxt.setText(ev.text);
+        } else {
+          this.eventTxt.setText('');
+        }
+
+        this.updateGauges();
+      }
+
+      ajustarSelic(delta) {
+        sfx.click();
+        this.selic = Math.max(2, Math.min(20, this.selic + delta));
+
+        // Effects are DELAYED by 1 round
+        if (delta > 0) {
+          this.pendingEffects.push({ inflacao: -1.2, pib: -0.5 });
+          this.feedbackSelic.setText('Juros subiram! O efeito na inflação\naparecerá na próxima rodada.').setStyle({ fill: '#ff9966', fontFamily: 'Nunito', fontSize: '12px' });
+        } else if (delta < 0) {
+          this.pendingEffects.push({ inflacao: +0.8, pib: +0.6 });
+          this.feedbackSelic.setText('Juros baixaram! Crédito mais barato.\nEfeito aparecerá na próxima rodada.').setStyle({ fill: '#66ffaa', fontFamily: 'Nunito', fontSize: '12px' });
+        } else {
+          this.feedbackSelic.setText('SELIC mantida. Aguardando efeitos.').setStyle({ fill: '#aaaaaa', fontFamily: 'Nunito', fontSize: '12px' });
+        }
+
+        this.rodada++;
+        this.rodadaTxt.setText(`Rodada ${Math.min(this.rodada + 1, this.maxRodadas)}/${this.maxRodadas}`);
+
+        // Disable buttons briefly
+        this.upHit.disableInteractive();
+        this.downHit.disableInteractive();
+        this.mantHit.disableInteractive();
+
+        this.time.delayedCall(1200, () => {
+          if (this.rodada >= this.maxRodadas) {
+            this.finishGame();
+          } else {
+            this.applyPendingAndShowEvent();
+            this.upHit.setInteractive({ useHandCursor: true });
+            this.downHit.setInteractive({ useHandCursor: true });
+            this.mantHit.setInteractive({ useHandCursor: true });
+          }
+        });
+
+        this.updateGauges();
+      }
+
+      updateGauges() {
+        const W = this.scale.width;
+        this.selicTxt.setText(`🏦 SELIC\n${this.selic.toFixed(1)}%`);
+        this.inflTxt.setText(`📈 Inflação\n${this.inflacao.toFixed(1)}%`);
+        this.pibTxt.setText(`🌱 PIB\n${this.pib >= 0 ? '+' : ''}${this.pib.toFixed(1)}%`);
+
+        // Animate scale
+        this.tweens.add({ targets: this.selicTxt, scaleX: 1.15, scaleY: 1.15, yoyo: true, duration: 200 });
+
+        // Color coding
+        if (this.inflacao >= this.metaInflacao.min && this.inflacao <= this.metaInflacao.max) {
+          this.inflTxt.setStyle({ fill: '#66ff66', fontFamily: 'Nunito', fontStyle: 'bold', fontSize: '14px', align: 'center', lineSpacing: 2 });
+          this.metaTxt.setText('✅ Inflação dentro da meta!').setStyle({ fill: '#66ff66', fontFamily: 'Nunito', fontStyle: 'bold', fontSize: '12px' });
+        } else if (this.inflacao > this.metaInflacao.max) {
+          this.inflTxt.setStyle({ fill: '#ff6644', fontFamily: 'Nunito', fontStyle: 'bold', fontSize: '14px', align: 'center', lineSpacing: 2 });
+          this.metaTxt.setText('⚠️ Inflação ACIMA da meta!').setStyle({ fill: '#ff6644', fontFamily: 'Nunito', fontStyle: 'bold', fontSize: '12px' });
+        } else {
+          this.inflTxt.setStyle({ fill: '#66aaff', fontFamily: 'Nunito', fontStyle: 'bold', fontSize: '14px', align: 'center', lineSpacing: 2 });
+          this.metaTxt.setText('❄️ Inflação abaixo da meta').setStyle({ fill: '#66aaff', fontFamily: 'Nunito', fontStyle: 'bold', fontSize: '12px' });
+        }
+
+        this.pibTxt.setStyle({ fill: this.pib >= 0 ? '#66ffaa' : '#ff6644', fontFamily: 'Nunito', fontStyle: 'bold', fontSize: '14px', align: 'center', lineSpacing: 2 });
+
+        // Update bars
+        if (this.selicBar) this.selicBar.destroy();
+        this.selicBar = this.add2(createProgressBar(this, 25, 172, 80, 8, this.selic / 20, 0xffd200, 0x333355));
+        if (this.inflBar) this.inflBar.destroy();
+        this.inflBar = this.add2(createProgressBar(this, W / 2 - 40, 172, 80, 8, this.inflacao / 15, this.inflacao <= 4.5 ? 0x66ff66 : 0xff6644, 0x333355));
+        if (this.pibBar) this.pibBar.destroy();
+        this.pibBar = this.add2(createProgressBar(this, W - 105, 172, 80, 8, (this.pib + 3) / 11, this.pib >= 0 ? 0x66ff66 : 0xff6644, 0x333355));
+      }
+
+      finishGame() {
+        // Apply any remaining pending effects
+        while (this.pendingEffects.length > 0) {
+          const eff = this.pendingEffects.shift();
+          this.inflacao = Math.max(0.5, Math.min(15, this.inflacao + eff.inflacao));
+          this.pib = Math.max(-3, Math.min(8, this.pib + eff.pib));
+        }
+
+        const inMeta = this.inflacao >= this.metaInflacao.min && this.inflacao <= this.metaInflacao.max;
+        const pibOk = this.pib > 0;
+        const stars = (inMeta && pibOk) ? 3 : inMeta ? 2 : 1;
+        progress.complete('selic', stars, inMeta ? 100 : 50);
+
+        this.clearContent();
+        const W = this.scale.width;
+
+        if (stars >= 2) { sfx.fanfare(); addConfetti(this, W / 2, 180, 25); }
+
+        this.add.text(W / 2, 120, stars >= 2 ? '🏆' : '🏦', { fontSize: '56px' }).setOrigin(0.5);
+        this.add.text(W / 2, 185, stars >= 2 ? 'Excelente gestão!' : 'Precisa calibrar mais!', {
+          fontSize: '18px', fontFamily: 'Fredoka One', fill: '#ffd200'
+        }).setOrigin(0.5);
+
+        this.add.text(W / 2, 240, `Inflação final: ${this.inflacao.toFixed(1)}% (meta: 3-4.5%)\nPIB: ${this.pib >= 0 ? '+' : ''}${this.pib.toFixed(1)}%\nSELIC final: ${this.selic.toFixed(1)}%`, {
+          fontSize: '13px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff', align: 'center', lineSpacing: 6
+        }).setOrigin(0.5);
+
+        this.add.text(W / 2, 300, starsText(stars), { fontSize: '24px', fill: '#ffd200' }).setOrigin(0.5);
+
+        const btns = [
+          { label: '🔄  Tentar de novo', cor: 0x8e44ad, action: () => { sfx.click(); this.showGame(); } },
+          { label: '🔗  Fase Final: Conexão →', cor: 0x8e44ad, action: () => { sfx.click(); this.cameras.main.fadeOut(300, 0, 0, 0); this.time.delayedCall(300, () => this.scene.start('SceneConexao')); } },
+          { label: '←  Menu', cor: 0x555555, action: () => { sfx.click(); this.cameras.main.fadeOut(300, 0, 0, 0); this.time.delayedCall(300, () => this.scene.start('Intro')); } },
+        ];
+        btns.forEach((b, i) => {
+          const btnY = 350 + i * 55;
+          const bg = this.add.graphics();
+          drawRoundedRect(bg, W / 2, btnY, 240, 42, 10, b.cor);
+          const txt = this.add.text(W / 2, btnY, b.label, {
+            fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff'
+          }).setOrigin(0.5);
+          const hit = this.add.rectangle(W / 2, btnY, 240, 42, 0xffffff, 0).setInteractive({ useHandCursor: true });
+          hit.on('pointerover', () => { sfx.hover(); this.tweens.add({ targets: [bg, txt, hit], scaleX: 1.04, scaleY: 1.04, duration: 100 }); });
+          hit.on('pointerout', () => this.tweens.add({ targets: [bg, txt, hit], scaleX: 1, scaleY: 1, duration: 100 }));
+          hit.on('pointerdown', b.action);
+        });
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // CENA 4: CONEXÃO — Monte a Cadeia Causal
+    // ═══════════════════════════════════════════════
+    class SceneConexao extends Phaser.Scene {
+      constructor() { super('SceneConexao'); }
+
+      create() {
+        const W = this.scale.width, H = this.scale.height;
+        this.cameras.main.fadeIn(400);
+
+        const bg = this.add.graphics();
+        bg.fillGradientStyle(0x100010, 0x100010, 0x1a0a2a, 0x0a0a20, 1);
+        bg.fillRect(0, 0, W, H);
+        addFloatingParticles(this, 15, 0x8e44ad, 0.05, 0.15);
+
+        const hdr = this.add.graphics();
+        hdr.fillGradientStyle(0x8e44ad, 0x7d3c98, 0x8e44ad, 0x7d3c98, 1);
+        hdr.fillRect(0, 0, W, 55);
+        this.add.text(W / 2, 27, '🔗 FASE 4: CONEXÃO', {
+          fontSize: '18px', fontFamily: 'Fredoka One', fill: '#fff'
+        }).setOrigin(0.5);
+        this.createBtnBack();
+
+        this.contentGroup = [];
+        this.showExplicacao();
+      }
+
+      createBtnBack() {
+        const btn = this.add.text(12, 27, '←', {
+          fontSize: '20px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#ddaaff',
+          backgroundColor: '#00000044', padding: { x: 8, y: 2 }
+        }).setOrigin(0, 0.5).setInteractive({ useHandCursor: true });
+        btn.on('pointerdown', () => {
+          sfx.click();
+          this.cameras.main.fadeOut(300, 0, 0, 0);
+          this.time.delayedCall(300, () => this.scene.start('Intro'));
+        });
+      }
+
+      clearContent() {
+        if (this.contentGroup) this.contentGroup.forEach(o => { if (o && o.destroy) o.destroy(); });
+        this.contentGroup = [];
+      }
+      add2(obj) { this.contentGroup.push(obj); return obj; }
+
+      showExplicacao() {
+        this.clearContent();
+        const W = this.scale.width;
+
+        const owl = this.add2(this.add.text(W / 2, 90, '🦉', { fontSize: '40px' }).setOrigin(0.5));
+        this.tweens.add({ targets: owl, y: 86, yoyo: true, repeat: -1, duration: 1500, ease: 'Sine.easeInOut' });
+
+        const bubble = drawSpeechBubble(this, W / 2, 155, 300, 70,
+          'Agora vamos ver como tudo se\nconecta! Monte as cadeias causais\nda economia brasileira.', '13px');
+        this.add2(bubble.graphics);
+        this.add2(bubble.text);
+
+        const btnBg = this.add2(this.add.graphics());
+        drawRoundedRect(btnBg, W / 2, 240, 260, 48, 12, 0x8e44ad);
+        const btnTxt = this.add2(this.add.text(W / 2, 240, '🧩  Jogar: Monte a Cadeia!', {
+          fontSize: '16px', fontFamily: 'Fredoka One', fill: '#fff'
+        }).setOrigin(0.5));
+        const btnHit = this.add2(this.add.rectangle(W / 2, 240, 260, 48, 0xffffff, 0).setInteractive({ useHandCursor: true }));
+        btnHit.on('pointerover', () => { sfx.hover(); this.tweens.add({ targets: [btnBg, btnTxt, btnHit], scaleX: 1.05, scaleY: 1.05, duration: 100 }); });
+        btnHit.on('pointerout', () => this.tweens.add({ targets: [btnBg, btnTxt, btnHit], scaleX: 1, scaleY: 1, duration: 100 }));
+        btnHit.on('pointerdown', () => { sfx.click(); this.showGame(); });
+      }
+
+      showGame() {
+        this.clearContent();
+        const W = this.scale.width;
+        this.erros = 0;
+        this.cadeiaAtual = 0;
+
+        this.cadeias = [
+          {
+            titulo: 'Como a SELIC combate a inflação?',
+            passos: ['SELIC sobe', 'Crédito fica caro', 'Consumo cai', 'Inflação diminui'],
+            embaralhados: null
+          },
+          {
+            titulo: 'Como o dólar afeta os preços?',
+            passos: ['Dólar sobe', 'Importação fica cara', 'Custo de produção sobe', 'Preços aumentam'],
+            embaralhados: null
+          },
+          {
+            titulo: 'Como a economia cresce?',
+            passos: ['SELIC cai', 'Crédito fica barato', 'Empresas investem', 'PIB cresce'],
+            embaralhados: null
+          }
+        ];
+
+        this.add2(this.add.text(W / 2, 75, '🧩 Monte a Cadeia Causal', {
+          fontSize: '16px', fontFamily: 'Fredoka One', fill: '#ffd200'
+        }).setOrigin(0.5));
+
+        this.progressTxt = this.add2(this.add.text(W / 2, 98, `Cadeia 1/${this.cadeias.length}`, {
+          fontSize: '12px', fontFamily: 'Nunito', fill: '#aaa'
+        }).setOrigin(0.5));
+
+        this.feedbackTxt = this.add2(this.add.text(W / 2, 555, '', {
+          fontSize: '13px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#66ff99', align: 'center'
+        }).setOrigin(0.5));
+
+        this.chainGroup = [];
+        this.showChain();
+      }
+
+      showChain() {
+        const W = this.scale.width;
+        if (this.chainGroup) this.chainGroup.forEach(o => { if (o && o.destroy) o.destroy(); });
+        this.chainGroup = [];
+
+        if (this.cadeiaAtual >= this.cadeias.length) {
+          this.finishGame();
+          return;
+        }
+
+        const cadeia = this.cadeias[this.cadeiaAtual];
+        this.progressTxt.setText(`Cadeia ${this.cadeiaAtual + 1}/${this.cadeias.length}`);
+
+        // Title
+        const titulo = this.add.text(W / 2, 135, cadeia.titulo, {
+          fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#ddaaff', align: 'center'
+        }).setOrigin(0.5);
+        this.chainGroup.push(titulo);
+
+        // Instruction
+        const instr = this.add.text(W / 2, 160, 'Clique nos passos na ordem correta (1→2→3→4):', {
+          fontSize: '11px', fontFamily: 'Nunito', fill: '#888'
+        }).setOrigin(0.5);
+        this.chainGroup.push(instr);
+
+        // Answer slots at the top
+        this.answerSlots = [];
+        this.answered = [];
+        for (let i = 0; i < 4; i++) {
+          const slotBg = this.add.graphics();
+          const slotY = 200 + i * 42;
+          slotBg.fillStyle(0x222244, 0.5);
+          slotBg.fillRoundedRect(30, slotY - 16, W - 60, 34, 8);
+          slotBg.lineStyle(1, 0x8e44ad, 0.3);
+          slotBg.strokeRoundedRect(30, slotY - 16, W - 60, 34, 8);
+
+          const num = this.add.text(40, slotY, `${i + 1}.`, {
+            fontSize: '13px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#8e44ad'
+          }).setOrigin(0, 0.5);
+
+          const slotTxt = this.add.text(60, slotY, '— clique abaixo —', {
+            fontSize: '12px', fontFamily: 'Nunito', fill: '#555'
+          }).setOrigin(0, 0.5);
+
+          // Arrow between slots
+          if (i < 3) {
+            const arrow = this.add.text(W / 2, slotY + 21, '↓', {
+              fontSize: '14px', fill: '#8e44ad'
+            }).setOrigin(0.5).setAlpha(0.4);
+            this.chainGroup.push(arrow);
+          }
+
+          this.answerSlots.push({ bg: slotBg, txt: slotTxt });
+          this.chainGroup.push(slotBg, num, slotTxt);
+        }
+
+        // Shuffled options
+        const shuffled = Phaser.Utils.Array.Shuffle([...cadeia.passos]);
+        this.optionButtons = [];
+        const startY = 400;
+        shuffled.forEach((passo, i) => {
+          const btnY = startY + i * 42;
+          const bg = this.add.graphics();
+          drawRoundedRect(bg, W / 2, btnY, 260, 34, 8, 0x3d2a5c);
+          const txt = this.add.text(W / 2, btnY, passo, {
+            fontSize: '13px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff'
+          }).setOrigin(0.5);
+          const hit = this.add.rectangle(W / 2, btnY, 260, 34, 0xffffff, 0).setInteractive({ useHandCursor: true });
+
+          hit.on('pointerover', () => {
+            sfx.hover();
+            bg.clear(); drawRoundedRect(bg, W / 2, btnY, 260, 34, 8, 0x5a3d8a);
+          });
+          hit.on('pointerout', () => {
+            bg.clear(); drawRoundedRect(bg, W / 2, btnY, 260, 34, 8, 0x3d2a5c);
+          });
+          hit.on('pointerdown', () => {
+            this.handleStepClick(passo, i, { bg, txt, hit });
+          });
+
+          this.chainGroup.push(bg, txt, hit);
+          this.optionButtons.push({ bg, txt, hit, passo });
+        });
+
+        this.chainGroup.forEach(o => this.add2(o));
+      }
+
+      handleStepClick(passo, btnIdx, refs) {
+        const cadeia = this.cadeias[this.cadeiaAtual];
+        const expectedStep = cadeia.passos[this.answered.length];
+
+        if (passo === expectedStep) {
+          sfx.correct();
+          const slotIdx = this.answered.length;
+          this.answered.push(passo);
+
+          // Update answer slot
+          this.answerSlots[slotIdx].txt.setText(passo).setStyle({
+            fill: '#66ff99', fontFamily: 'Nunito', fontSize: '12px', fontStyle: 'bold'
+          });
+          this.answerSlots[slotIdx].bg.clear();
+          this.answerSlots[slotIdx].bg.fillStyle(0x27ae60, 0.2);
+          this.answerSlots[slotIdx].bg.fillRoundedRect(30, 200 + slotIdx * 42 - 16, this.scale.width - 60, 34, 8);
+
+          // Disable the button
+          refs.hit.disableInteractive();
+          refs.bg.clear();
+          drawRoundedRect(refs.bg, this.scale.width / 2, 400 + btnIdx * 42, 260, 34, 8, 0x27ae60, 0.3);
+          refs.txt.setAlpha(0.4);
+
+          this.feedbackTxt.setText('✅ Correto!').setStyle({ fill: '#66ff99', fontFamily: 'Nunito', fontStyle: 'bold', fontSize: '13px' });
+
+          if (this.answered.length >= 4) {
+            addConfetti(this, this.scale.width / 2, 300, 15);
+            this.cadeiaAtual++;
+            this.time.delayedCall(1200, () => {
+              this.feedbackTxt.setText('');
+              this.showChain();
+            });
+          }
+        } else {
+          sfx.wrong();
+          this.erros++;
+          this.cameras.main.shake(150, 0.006);
+          this.feedbackTxt.setText('❌ Ordem incorreta! Tente outro passo.').setStyle({ fill: '#ff6666', fontFamily: 'Nunito', fontStyle: 'bold', fontSize: '13px' });
+
+          // Flash red
+          refs.bg.clear();
+          drawRoundedRect(refs.bg, this.scale.width / 2, 400 + btnIdx * 42, 260, 34, 8, 0xe74c3c);
+          this.time.delayedCall(300, () => {
+            refs.bg.clear();
+            drawRoundedRect(refs.bg, this.scale.width / 2, 400 + btnIdx * 42, 260, 34, 8, 0x3d2a5c);
+          });
+        }
+      }
+
+      finishGame() {
+        const stars = this.erros === 0 ? 3 : this.erros <= 3 ? 2 : 1;
+        progress.complete('conexao', stars, Math.max(0, 100 - this.erros * 15));
+
+        this.clearContent();
+        const W = this.scale.width;
+
+        if (stars >= 2) { sfx.fanfare(); addConfetti(this, W / 2, 180, 25); }
+
+        this.add.text(W / 2, 130, stars >= 2 ? '🏆' : '🔗', { fontSize: '56px' }).setOrigin(0.5);
+        this.add.text(W / 2, 200, 'Cadeias Montadas!', {
+          fontSize: '20px', fontFamily: 'Fredoka One', fill: '#ffd200'
+        }).setOrigin(0.5);
+        this.add.text(W / 2, 240, `Erros: ${this.erros}`, {
+          fontSize: '15px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff'
+        }).setOrigin(0.5);
+        this.add.text(W / 2, 270, starsText(stars), { fontSize: '24px', fill: '#ffd200' }).setOrigin(0.5);
+
+        this.add.text(W / 2, 310, '💡 Tudo na economia está conectado!\nUma decisão gera uma cadeia de efeitos.', {
+          fontSize: '12px', fontFamily: 'Nunito', fill: '#ddaaff', align: 'center', lineSpacing: 4
+        }).setOrigin(0.5);
+
+        const btns = [
+          { label: '🔄  Tentar de novo', cor: 0x8e44ad, action: () => { sfx.click(); this.showGame(); } },
+          { label: '🏆  Ver Resultado Final', cor: 0xe67e22, action: () => { sfx.click(); this.cameras.main.fadeOut(300, 0, 0, 0); this.time.delayedCall(300, () => this.scene.start('SceneFinal')); } },
+          { label: '←  Menu', cor: 0x555555, action: () => { sfx.click(); this.cameras.main.fadeOut(300, 0, 0, 0); this.time.delayedCall(300, () => this.scene.start('Intro')); } },
+        ];
+        btns.forEach((b, i) => {
+          const btnY = 365 + i * 55;
+          const bg = this.add.graphics();
+          drawRoundedRect(bg, W / 2, btnY, 240, 42, 10, b.cor);
+          const txt = this.add.text(W / 2, btnY, b.label, {
+            fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff'
+          }).setOrigin(0.5);
+          const hit = this.add.rectangle(W / 2, btnY, 240, 42, 0xffffff, 0).setInteractive({ useHandCursor: true });
+          hit.on('pointerover', () => { sfx.hover(); this.tweens.add({ targets: [bg, txt, hit], scaleX: 1.04, scaleY: 1.04, duration: 100 }); });
+          hit.on('pointerout', () => this.tweens.add({ targets: [bg, txt, hit], scaleX: 1, scaleY: 1, duration: 100 }));
+          hit.on('pointerdown', b.action);
+        });
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // CENA FINAL: DIPLOMA COM ESTATÍSTICAS
+    // ═══════════════════════════════════════════════
+    class SceneFinal extends Phaser.Scene {
+      constructor() { super('SceneFinal'); }
+
+      create() {
+        const W = this.scale.width, H = this.scale.height;
+        this.cameras.main.fadeIn(600);
+
+        // Festive gradient background
+        const bg = this.add.graphics();
+        bg.fillGradientStyle(0x0a0a00, 0x0a0a00, 0x1a1000, 0x0a0a0a, 1);
+        bg.fillRect(0, 0, W, H);
+
+        this.createFireworks();
+
+        // Graduation cap
+        const cap = this.add.text(W / 2, 65, '🎓', { fontSize: '52px' }).setOrigin(0.5).setScale(0.3).setAlpha(0);
+        this.tweens.add({ targets: cap, alpha: 1, scaleX: 1, scaleY: 1, duration: 800, ease: 'Back.out' });
+
+        // Title
+        const title = this.add.text(W / 2, 120, 'PARABÉNS!', {
+          fontSize: '30px', fontFamily: 'Fredoka One', fill: '#ffd200',
+          stroke: '#000', strokeThickness: 4
+        }).setOrigin(0.5).setAlpha(0);
+        this.tweens.add({ targets: title, alpha: 1, duration: 600, delay: 300 });
+
+        this.add.text(W / 2, 155, 'Você completou o Mundo do Dinheiro!', {
+          fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff', align: 'center'
+        }).setOrigin(0.5);
+
+        // Stats card
+        const totalStars = progress.totalStars();
+        const totalDone = progress.totalDone();
+
+        const cardBg = this.add.graphics();
+        cardBg.fillStyle(0x1a1a0a, 0.9);
+        cardBg.fillRoundedRect(20, 178, W - 40, 230, 12);
+        cardBg.lineStyle(2, 0xffd200, 0.4);
+        cardBg.strokeRoundedRect(20, 178, W - 40, 230, 12);
+
+        this.add.text(W / 2, 200, '📋 O que você aprendeu:', {
+          fontSize: '14px', fontFamily: 'Fredoka One', fill: '#ffd200'
+        }).setOrigin(0.5);
+
+        const fases = [
+          { key: 'inflacao', icon: '📈', nome: 'Inflação', resumo: 'Preços sobem com mais dinheiro' },
+          { key: 'cambio', icon: '💵', nome: 'Câmbio', resumo: 'Dólar reflete saúde do país' },
+          { key: 'selic', icon: '🏦', nome: 'SELIC', resumo: 'Termostato da economia' },
+          { key: 'conexao', icon: '🔗', nome: 'Conexão', resumo: 'Tudo está interligado!' },
+        ];
+
+        fases.forEach((f, i) => {
+          const y = 232 + i * 40;
+          const pData = progress.get(f.key);
+          const done = pData.done;
+
+          this.add.text(35, y, `${f.icon} ${f.nome}`, {
+            fontSize: '12px', fontFamily: 'Nunito', fontStyle: 'bold', fill: done ? '#fff' : '#666'
+          }).setOrigin(0, 0.5);
+
+          this.add.text(160, y, f.resumo, {
+            fontSize: '10px', fontFamily: 'Nunito', fill: done ? '#aaa' : '#444'
+          }).setOrigin(0, 0.5);
+
+          this.add.text(W - 30, y, done ? starsText(pData.stars) : '☆☆☆', {
+            fontSize: '11px', fill: done ? '#ffd200' : '#333'
+          }).setOrigin(1, 0.5);
+        });
+
+        // Total stars
+        this.add.text(W / 2, 400, `⭐ Total: ${totalStars}/12 estrelas`, {
+          fontSize: '16px', fontFamily: 'Fredoka One', fill: '#ffd200'
+        }).setOrigin(0.5);
+
+        createProgressBar(this, W / 2 - 80, 420, 160, 10, totalStars / 12, 0xffd200, 0x333344);
+
+        // Buttons
+        const btnsBg = [
+          { label: '🏠  Jogar de Novo', cor: 0xe67e22, action: () => { sfx.click(); this.cameras.main.fadeOut(400, 0, 0, 0); this.time.delayedCall(400, () => this.scene.start('Intro')); } },
+          { label: '🗑️  Resetar Progresso', cor: 0x555555, action: () => { sfx.click(); progress.reset(); this.cameras.main.fadeOut(400, 0, 0, 0); this.time.delayedCall(400, () => this.scene.start('Intro')); } },
+        ];
+        btnsBg.forEach((b, i) => {
+          const btnY = 465 + i * 52;
+          const bg2 = this.add.graphics();
+          drawRoundedRect(bg2, W / 2, btnY, 220, 42, 10, b.cor);
+          const txt = this.add.text(W / 2, btnY, b.label, {
+            fontSize: '14px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#fff'
+          }).setOrigin(0.5);
+          const hit = this.add.rectangle(W / 2, btnY, 220, 42, 0xffffff, 0).setInteractive({ useHandCursor: true });
+          hit.on('pointerover', () => { sfx.hover(); this.tweens.add({ targets: [bg2, txt, hit], scaleX: 1.04, scaleY: 1.04, duration: 100 }); });
+          hit.on('pointerout', () => this.tweens.add({ targets: [bg2, txt, hit], scaleX: 1, scaleY: 1, duration: 100 }));
+          hit.on('pointerdown', b.action);
+        });
+
+        this.add.text(W / 2, 555, '🌍 Agora você entende o mundo do dinheiro!', {
+          fontSize: '12px', fontFamily: 'Nunito', fontStyle: 'bold', fill: '#ffd20088', align: 'center'
+        }).setOrigin(0.5);
+
+        sfx.fanfare();
+      }
+
+      createFireworks() {
+        const W = this.scale.width;
+        const cores = [0xff6b6b, 0xffd200, 0x6bff6b, 0x6baaff, 0xff6bff, 0xff9f43];
+
+        const launch = () => {
+          const x = Phaser.Math.Between(40, W - 40);
+          const y = Phaser.Math.Between(30, 150);
+          sfx.pop();
+          for (let i = 0; i < 14; i++) {
+            const angle = (i / 14) * Math.PI * 2;
+            const speed = Phaser.Math.Between(35, 85);
+            const size = Phaser.Math.Between(2, 5);
+            const p = this.add.circle(x, y, size, Phaser.Math.RND.pick(cores), 1);
+            this.tweens.add({
+              targets: p,
+              x: x + Math.cos(angle) * speed,
+              y: y + Math.sin(angle) * speed + 30,
+              alpha: 0, scaleX: 0, scaleY: 0,
+              duration: Phaser.Math.Between(700, 1100),
+              ease: 'Power2',
+              onComplete: () => p.destroy()
+            });
+          }
+        };
+
+        this.time.addEvent({ delay: 500, callback: launch, repeat: 12 });
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // CONFIG & BOOT
+    // ═══════════════════════════════════════════════
+    const config = {
+      type: Phaser.AUTO,
+      width: 360,
+      height: 620,
+      backgroundColor: '#06061a',
+      parent: 'game-container',
+      scene: [SceneIntro, SceneInflacao, SceneCambio, SceneSelic, SceneConexao, SceneFinal],
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+      }
+    };
+
+    new Phaser.Game(config);
+  </script>
+</body>
+
+</html>

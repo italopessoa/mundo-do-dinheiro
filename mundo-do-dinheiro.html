@@ -225,24 +225,28 @@
           if (this.bgmInterval) clearTimeout(this.bgmInterval);
         } else {
           this.bgmPlaying = true;
-          // Progressão Pedrada (Chico César): Bb - Gm - Eb - F
-          // Ritmo Reggae (Baixo nas cabeças, acordes no contratempo) e melodia marcante
+          // Progressão Pedrada (Chico César) - Refrão completo
+          // Bb - Gm - Eb - Cm7 - F - Bb
           const progression = [
-            // Bar 0: Bb
-            { bass: 116.54, chord: [233.08, 293.66, 349.23], melody: [349.23, 0, 349.23, 0, 293.66, 0, 0, 0] },
-            // Bar 1: Gm
-            { bass: 98.00, chord: [196.00, 233.08, 293.66], melody: [293.66, 0, 293.66, 0, 233.08, 0, 0, 0] },
-            // Bar 2: Eb
-            { bass: 77.78, chord: [155.56, 196.00, 233.08], melody: [233.08, 0, 233.08, 0, 196.00, 0, 0, 0] },
-            // Bar 3: F
-            { bass: 87.31, chord: [174.61, 220.00, 261.63], melody: [261.63, 0, 261.63, 0, 220.00, 0, 0, 0] }
+            // Bar 0: Bb ("Mas nós temos a...")
+            { bass: 116.54, chord: [233.08, 293.66, 349.23], melody: [349.23, 0, 349.23, 0, 349.23, 349.23, 0, 0] },
+            // Bar 1: Gm ("pedrada pra jogar")
+            { bass: 98.00,  chord: [196.00, 233.08, 293.66], melody: [293.66, 0, 0, 293.66, 293.66, 0, 261.63, 293.66] },
+            // Bar 2: Eb ("A bola incen-")
+            { bass: 155.56, chord: [155.56, 196.00, 233.08], melody: [392.00, 0, 392.00, 0, 392.00, 392.00, 0, 0] },
+            // Bar 3: Cm7 ("-diária está no ar")
+            { bass: 130.81, chord: [155.56, 196.00, 233.08], melody: [311.13, 0, 0, 311.13, 311.13, 0, 293.66, 311.13] },
+            // Bar 4: F ("Fogo nos fascistas")
+            { bass: 174.61, chord: [174.61, 220.00, 261.63], melody: [261.63, 261.63, 0, 261.63, 261.63, 0, 261.63, 0] },
+            // Bar 5: Bb ("Fogo, Jah!")
+            { bass: 116.54, chord: [233.08, 293.66, 349.23], melody: [233.08, 0, 0, 349.23, 349.23, 0, 0, 0] }
           ];
           
           let step = 0;
           const playNext = () => {
             if (!this.bgmPlaying) return;
             
-            const bar = Math.floor(step / 8) % 4;
+            const bar = Math.floor(step / 8) % 6; // 6 compassos no refrão
             const beat = step % 8;
             const prog = progression[bar];
             
@@ -256,7 +260,7 @@
               prog.chord.forEach(f => this._tone(f, 0.1, 'square', 0.02));
             }
             
-            // Melodia "Pe-dra-da"
+            // Melodia 
             const m = prog.melody[beat];
             if (m) {
               this._tone(m, 0.2, 'sine', 0.05);
